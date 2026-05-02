@@ -1,10 +1,62 @@
+import { useEffect, useState } from 'react'
 import { EkgLine, StatePill, relTime, formatDate } from '../components/shared'
 import { FILE_DECAY } from '../data/repos'
+import { getRepoFileActivity } from '../lib/github'
 
-export function AutopsyPage({ voice, repo, onBack, onAction }) {
+export function AutopsyPage({ voice, repo, githubToken, onBack, onAction }) {
   if (!repo) return null
   const isDead = repo.state === 'flatlined' || repo.state === 'dead'
-  const fileDecay = FILE_DECAY[repo.id] || generateDecay(repo)
+  const hasCatalogedDecay = Boolean(FILE_DECAY[repo.id])
+  const isConnectedRepo = repo.id.startsWith('gh-') && !!githubToken
+  const [liveFileActivity, setLiveFileActivity] = useState(null)
+  const [fileActivityState, setFileActivityState] = useState({ loading: false, error: null, sampledCommits: 0 })
+
+  useEffect(() => {
+    let cancelled = false
+
+    if (!isConnectedRepo) {
+      setLiveFileActivity(null)
+      setFileActivityState({ loading: false, error: null, sampledCommits: 0 })
+      return () => { cancelled = true }
+    }
+
+    setFileActivityState({ loading: true, error: null, sampledCommits: 0 })
+    setLiveFileActivity(null)
+
+    getRepoFileActivity(githubToken, repo.owner, repo.name)
+      .then((result) => {
+        if (cancelled) return
+        setLiveFileActivity(result?.files?.length ? result.files : null)
+        setFileActivityState({
+          loading: false,
+          error: null,
+          sampledCommits: result?.sampledCommits || 0,
+        })
+      })
+      .catch((error) => {
+        if (cancelled) return
+        setLiveFileActivity(null)
+        setFileActivityState({
+          loading: false,
+          error,
+          sampledCommits: 0,
+        })
+      })
+
+    return () => { cancelled = true }
+  }, [githubToken, isConnectedRepo, repo.id, repo.name, repo.owner])
+
+  const fileDecay = liveFileActivity || FILE_DECAY[repo.id] || generateDecay(repo)
+  const fileActivityMode = liveFileActivity?.length
+    ? 'live'
+    : hasCatalogedDecay
+    ? 'demo'
+    : fileActivityState.loading
+    ? 'loading'
+    : fileActivityState.error
+    ? 'fallback'
+    : 'estimated'
+  const lineColumnLabel = fileActivityMode === 'live' ? 'Δ lines' : 'LOC'
 
   return (
     <>
@@ -74,12 +126,24 @@ export function AutopsyPage({ voice, repo, onBack, onAction }) {
             <div>
               <h2>{voice.fileDecay}</h2>
               <div className="panel">
+                <div style={{ padding: '10px 16px', borderBottom: '1px solid var(--line)',
+                              fontFamily: 'var(--mono)', fontSize: 10, color: 'var(--fg-3)' }}>
+                  {fileActivityMode === 'live'
+                    ? `Derived from the most recent ${fileActivityState.sampledCommits} GitHub commit${fileActivityState.sampledCommits === 1 ? '' : 's'}. "Δ lines" reflects sampled changed lines, not full-file LOC.`
+                    : fileActivityMode === 'demo'
+                    ? 'Captured from the demo dataset.'
+                    : fileActivityMode === 'loading'
+                    ? 'Loading recent file history from GitHub…'
+                    : fileActivityMode === 'fallback'
+                    ? 'Recent file history could not be fetched from GitHub. Showing a state-based estimate instead.'
+                    : 'Estimated from repository state and last activity. File-level history is unavailable for this repo.'}
+                </div>
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 60px 110px 80px', gap: 12,
                               padding: '8px 16px', borderBottom: '1px solid var(--line)',
                               fontFamily: 'var(--mono)', fontSize: 9, letterSpacing: '0.10em', textTransform: 'uppercase',
                               color: 'var(--fg-3)' }}>
                   <span>Path</span>
-                  <span style={{ textAlign: 'right' }}>LOC</span>
+                  <span style={{ textAlign: 'right' }}>{lineColumnLabel}</span>
                   <span>Last touched</span>
                   <span>Decay</span>
                 </div>
@@ -129,12 +193,19 @@ export function AutopsyPage({ voice, repo, onBack, onAction }) {
             <div className="panel">
               <div className="panel-hd">
                 <span>{voice.toxicology}</span>
-                <span className="index">{repo.deps == null || repo.depsOutdated == null ? 'unavailable for live sync' : `${repo.deps} total · ${repo.depsOutdated} outdated`}</span>
+                <span className="index">
+                  {repo.deps == null
+                    ? 'unavailable for live sync'
+                    : repo.depsOutdated == null
+                    ? `${repo.deps} declared · outdated unknown`
+                    : `${repo.deps} total · ${repo.depsOutdated} outdated`}
+                </span>
               </div>
               <div style={{ padding: '14px 18px' }}>
                 <DepsBar total={repo.deps} outdated={repo.depsOutdated} />
                 <div style={{ fontFamily: 'var(--mono)', fontSize: 10, color: 'var(--fg-3)', marginTop: 10, lineHeight: 1.6 }}>
-                  {repo.deps == null || repo.depsOutdated == null ? 'Dependency data is not collected from the GitHub API in the live view.' :
+                  {repo.deps == null ? 'Dependency data is not collected from the GitHub API in the live view.' :
+                   repo.depsOutdated == null ? `Declared dependency count parsed from ${repo.depsSource || 'repository manifest'}. Outdated-package analysis is not implemented yet.` :
                    repo.depsOutdated > 20 ? 'Toxicology suggests significant rot.' :
                    repo.depsOutdated > 5 ? 'Mild dependency degradation detected.' :
                    repo.depsOutdated > 0 ? 'Minor outdated packages. Survivable.' :
@@ -222,10 +293,18 @@ function CommitTimeline({ repo }) {
 }
 
 function DepsBar({ total, outdated }) {
-  if (total == null || outdated == null) {
+  if (total == null) {
     return (
       <div style={{ fontFamily: 'var(--mono)', fontSize: 10, color: 'var(--fg-3)' }}>
         No dependency inventory available.
+      </div>
+    )
+  }
+
+  if (outdated == null) {
+    return (
+      <div style={{ fontFamily: 'var(--mono)', fontSize: 10, color: 'var(--fg-3)' }}>
+        {total} declared dependency{total === 1 ? '' : 'ies'} found. Outdated-package analysis is unavailable.
       </div>
     )
   }

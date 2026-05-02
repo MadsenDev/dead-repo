@@ -10,6 +10,7 @@ import { CertificateModal } from './pages/certificate'
 import { WrappedFlow } from './pages/wrapped'
 import { enrichRepos, getUser, getUserRepos } from './lib/github'
 import { mapGitHubRepo, reclassifyMappedRepo } from './lib/classify'
+import { APP_VERSION } from './lib/version'
 
 const ACCENT_MAP = {
   phosphor: { vital: 'oklch(0.78 0.16 152)', glow: 'oklch(0.78 0.16 152 / 0.45)', faint: 'oklch(0.78 0.16 152 / 0.18)', dim: 'oklch(0.55 0.14 152)' },
@@ -20,6 +21,26 @@ const ACCENT_MAP = {
 
 function getStoredToken() {
   try { return localStorage.getItem('github_token') } catch { return null }
+}
+
+function getStoredRepoCache() {
+  try {
+    return JSON.parse(localStorage.getItem('github_repo_cache') || 'null')
+  } catch {
+    return null
+  }
+}
+
+function writeRepoCache(payload) {
+  try {
+    localStorage.setItem('github_repo_cache', JSON.stringify(payload))
+  } catch {
+    // ignore cache write failures
+  }
+}
+
+function clearRepoCache() {
+  try { localStorage.removeItem('github_repo_cache') } catch {}
 }
 
 function getStoredThresholds() {
@@ -48,25 +69,66 @@ export default function App() {
   const [thresholds, setThresholds] = useState(getStoredThresholds)
 
   // GitHub state
-  const [githubToken, setGithubToken] = useState(getStoredToken)
+  const [authReady, setAuthReady] = useState(false)
+  const [githubToken, setGithubToken] = useState(null)
   const [githubUser, setGithubUser] = useState(() => {
     try { return JSON.parse(localStorage.getItem('github_user') || 'null') } catch { return null }
   })
   const [liveRepos, setLiveRepos] = useState(null)
+  const [cacheMeta, setCacheMeta] = useState(() => getStoredRepoCache()?.meta || null)
   const [syncing, setSyncing] = useState(false)
   const [syncTick, setSyncTick] = useState(0)
+  const [githubNotice, setGithubNotice] = useState(null)
 
   // Show onboarding if no token and not explicitly dismissed
-  const [showOnboarding, setShowOnboarding] = useState(
-    !getStoredToken() && !localStorage.getItem('github_dismissed')
-  )
+  const [showOnboarding, setShowOnboarding] = useState(false)
+
+  useEffect(() => {
+    let cancelled = false
+
+    const loadAuth = async () => {
+      const localToken = getStoredToken()
+      try {
+        const session = await window.electronAPI?.getGitHubSession?.()
+        const token = session?.token || localToken
+        const cache = getStoredRepoCache()
+        if (localToken && !session?.token) {
+          await window.electronAPI?.setGitHubSession?.({ token: localToken })
+        }
+        localStorage.removeItem('github_token')
+
+        if (cancelled) return
+        setGithubToken(token || null)
+        if (token && cache?.repos?.length >= 0) {
+          setLiveRepos(cache.repos || [])
+          setCacheMeta(cache.meta || null)
+          if (cache.user) {
+            setGithubUser(cache.user)
+            localStorage.setItem('github_user', JSON.stringify(cache.user))
+          }
+        }
+        setShowOnboarding(!token && !localStorage.getItem('github_dismissed'))
+      } catch {
+        if (cancelled) return
+        setGithubToken(localToken || null)
+        setShowOnboarding(!localToken && !localStorage.getItem('github_dismissed'))
+      } finally {
+        if (!cancelled) setAuthReady(true)
+      }
+    }
+
+    loadAuth()
+    return () => { cancelled = true }
+  }, [])
 
   // Auto-fetch repos whenever we have a token but no live data
   useEffect(() => {
+    if (!authReady) return
     if (!githubToken) return
     let cancelled = false
     const fetch = async () => {
       setSyncing(true)
+      setGithubNotice(null)
       try {
         const [user, rawRepos] = await Promise.all([
           getUser(githubToken),
@@ -76,18 +138,44 @@ export default function App() {
         if (user) {
           setGithubUser(user)
           localStorage.setItem('github_user', JSON.stringify(user))
+          await window.electronAPI?.setGitHubSession?.({ token: githubToken })
         }
         const enriched = await enrichRepos(githubToken, rawRepos || [])
         if (cancelled) return
-        setLiveRepos(enriched.map(({ repo, insights }) => mapGitHubRepo(repo, insights, thresholds)))
-      } catch {
-        // token likely expired — clear it and show onboarding
+        const mappedRepos = enriched.results.map(({ repo, insights }) => mapGitHubRepo(repo, insights, thresholds))
+        const nextCacheMeta = {
+          savedAt: Date.now(),
+          repoCount: mappedRepos.length,
+        }
+        setLiveRepos(mappedRepos)
+        setCacheMeta(nextCacheMeta)
+        writeRepoCache({
+          user,
+          repos: mappedRepos,
+          meta: nextCacheMeta,
+        })
+        if (enriched.failures > 0) {
+          setGithubNotice({
+            kind: enriched.rateLimit ? 'rate-limit' : 'partial',
+            failures: enriched.failures,
+            resetAt: enriched.rateLimit?.resetAt ?? null,
+          })
+        }
+      } catch (error) {
         if (!cancelled) {
-          localStorage.removeItem('github_token')
-          localStorage.removeItem('github_user')
-          setGithubToken(null)
-          setGithubUser(null)
-          setShowOnboarding(true)
+          if (error?.isAuthFailure) {
+            localStorage.removeItem('github_user')
+            await window.electronAPI?.clearGitHubSession?.()
+            setGithubToken(null)
+            setGithubUser(null)
+            setShowOnboarding(true)
+          } else {
+            setGithubNotice({
+              kind: error?.isRateLimit ? 'rate-limit' : 'error',
+              message: error?.message || 'GitHub sync failed.',
+              resetAt: error?.rateLimit?.resetAt ?? null,
+            })
+          }
         }
       } finally {
         if (!cancelled) setSyncing(false)
@@ -95,7 +183,7 @@ export default function App() {
     }
     fetch()
     return () => { cancelled = true }
-  }, [githubToken, syncTick])
+  }, [authReady, githubToken, syncTick])
 
   const voice = VOICES[voiceKey] || VOICES.neutral
   const accent = ACCENT_MAP[accentKey] || ACCENT_MAP.phosphor
@@ -154,7 +242,7 @@ export default function App() {
 
   const handleOnboardingComplete = (token, repos) => {
     if (token) {
-      localStorage.setItem('github_token', token)
+      window.electronAPI?.setGitHubSession?.({ token })
       setGithubToken(token)
     } else {
       localStorage.setItem('github_dismissed', '1')
@@ -165,12 +253,14 @@ export default function App() {
   }
 
   const handleDisconnect = () => {
-    localStorage.removeItem('github_token')
     localStorage.removeItem('github_user')
     localStorage.removeItem('github_dismissed')
+    window.electronAPI?.clearGitHubSession?.()
+    clearRepoCache()
     setGithubToken(null)
     setGithubUser(null)
     setLiveRepos(null)
+    setCacheMeta(null)
     setShowOnboarding(true)
   }
 
@@ -195,7 +285,20 @@ export default function App() {
   const openRepo = repos.find(r => r.id === openRepoId)
   const isLive = !!githubToken && !!liveRepos
   const displayUser = githubUser?.login || (githubToken ? 'connected' : 'demo mode')
-  const syncLabel = syncing ? 'syncing…' : isLive ? new Date().toLocaleTimeString('en-US', { hour12: false }) : 'demo'
+  const syncLabel = syncing
+    ? 'syncing…'
+    : isLive && cacheMeta?.savedAt
+    ? new Date(cacheMeta.savedAt).toLocaleTimeString('en-US', { hour12: false })
+    : isLive
+    ? 'live'
+    : 'demo'
+  const noticeLabel = githubNotice?.kind === 'rate-limit'
+    ? `rate limited${githubNotice.resetAt ? ` until ${new Date(githubNotice.resetAt).toLocaleTimeString('en-US', { hour12: false })}` : ''}`
+    : githubNotice?.kind === 'partial'
+    ? `${githubNotice.failures} repo scan(s) partial`
+    : githubNotice?.kind === 'error'
+    ? 'sync error'
+    : null
 
   return (
     <div className="app">
@@ -206,11 +309,17 @@ export default function App() {
           <div className="titlebar-light g" onClick={() => window.electronAPI?.maximize()} title="Maximize" />
         </div>
         <div className="titlebar-title">
-          {voiceKey === 'supportive' ? 'our little repo garden 💕' : 'DEAD REPO · v0.1.0'}
+          {voiceKey === 'supportive' ? 'our little repo garden 💕' : `DEAD REPO · v${APP_VERSION}`}
         </div>
         <div className="titlebar-meta" style={{ WebkitAppRegion: 'no-drag' }}>
           <span className="dot" style={{ background: isLive ? 'var(--vital)' : 'var(--fg-3)', boxShadow: isLive ? '0 0 6px var(--vital-glow)' : 'none', animation: isLive ? 'pulse-dot 2.5s ease-in-out infinite' : 'none' }} />
           <span>{syncing ? 'fetching repositories…' : isLive ? `monitoring · ${repos.length} subjects` : 'demo mode'}</span>
+          {noticeLabel && (
+            <>
+              <span style={{ color: 'var(--fg-4)' }}>│</span>
+              <span style={{ color: githubNotice.kind === 'error' || githubNotice.kind === 'rate-limit' ? 'var(--warn)' : 'var(--fg-2)' }}>{noticeLabel}</span>
+            </>
+          )}
           <span style={{ color: 'var(--fg-4)' }}>│</span>
           <span>sync {syncLabel}</span>
         </div>
@@ -258,6 +367,7 @@ export default function App() {
         <div className="content">
           {openRepoId && openRepo ? (
             <AutopsyPage voice={voice} repo={openRepo}
+                         githubToken={githubToken}
                          onBack={() => setOpenRepoId(null)}
                          onAction={handleAction} />
           ) : page === 'dashboard' ? (
@@ -269,6 +379,8 @@ export default function App() {
                           density={density} onDensity={setDensity}
                           thresholds={thresholds} onThresholdsChange={handleThresholdsChange}
                           githubUser={githubUser} isLive={isLive} syncing={syncing}
+                          cacheMeta={cacheMeta}
+                          githubNotice={githubNotice}
                           onDisconnect={handleDisconnect}
                           onConnect={() => setShowOnboarding(true)}
                           onResync={handleResync} />
@@ -318,6 +430,7 @@ function NavItem({ glyph, label, count, active, onClick }) {
 
 function DevStrip({ onNav, onOpenRepo, onOnboarding, onCert, onWrapped, voiceKey, onVoice, accentKey, onAccent, density, onDensity }) {
   const [open, setOpen] = useState(false)
+  const wrappedYear = new Date().getFullYear() - 1
   return (
     <div style={{ position: 'fixed', bottom: 12, right: 12, zIndex: 300, display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 8 }}>
       {open && (
@@ -364,7 +477,7 @@ function DevStrip({ onNav, onOpenRepo, onOnboarding, onCert, onWrapped, voiceKey
               ['Settings', () => onNav('settings')],
               ['Replay onboarding', onOnboarding],
               ['Death certificate', onCert],
-              ['2025 Wrapped', onWrapped],
+              [`${wrappedYear} Wrapped`, onWrapped],
             ].map(([label, fn]) => (
               <button key={label} onClick={fn}
                       style={{ height: 26, border: '1px solid var(--line)', borderRadius: 3,

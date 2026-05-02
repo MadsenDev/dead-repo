@@ -1,5 +1,6 @@
 import { useState, useRef } from 'react'
 import { EkgLine, formatDate } from '../components/shared'
+import { APP_VERSION } from '../lib/version'
 
 export function CertificateModal({ repo, voice, onClose }) {
   const certRef = useRef(null)
@@ -186,7 +187,7 @@ export function CertificateModal({ repo, voice, onClose }) {
               </div>
               <div style={{ fontFamily: 'var(--mono)', fontSize: 9, color: 'var(--fg-3)',
                             marginTop: 4, letterSpacing: '0.04em' }}>
-                Coroner · {voice.name} edition · v0.1.0
+                Coroner · {voice.name} edition · v{APP_VERSION}
               </div>
             </div>
             <div style={{ textAlign: 'right' }}>

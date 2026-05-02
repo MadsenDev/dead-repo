@@ -2,6 +2,7 @@ const { shell } = require('electron')
 const http = require('http')
 const https = require('https')
 const { URL } = require('url')
+const { version: APP_VERSION } = require('../package.json')
 
 const CLIENT_ID = process.env.GITHUB_CLIENT_ID
 const CLIENT_SECRET = process.env.GITHUB_CLIENT_SECRET
@@ -108,7 +109,7 @@ function exchangeCode(code) {
         'Content-Type': 'application/json',
         'Accept': 'application/json',
         'Content-Length': Buffer.byteLength(body),
-        'User-Agent': 'DeadRepo/0.1.0',
+        'User-Agent': `DeadRepo/${APP_VERSION}`,
       },
     }, (res) => {
       let data = ''

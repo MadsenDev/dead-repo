@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from 'react'
 import { EkgLine } from '../components/shared'
 import { getRepoInsights, getUser, getUserRepos } from '../lib/github'
 import { mapGitHubRepo } from '../lib/classify'
+import { APP_VERSION } from '../lib/version'
 
 export function OnboardingFlow({ voice, onComplete }) {
   const [stage, setStage] = useState('welcome')
@@ -39,7 +40,7 @@ function WelcomeScreen({ onNext }) {
       </div>
       <div style={{ fontFamily: 'var(--mono)', fontSize: 10, letterSpacing: '0.20em',
                     color: 'var(--vital)', textTransform: 'uppercase', marginBottom: 16 }}>
-        Dead Repo · v0.1.0
+        {`Dead Repo · v${APP_VERSION}`}
       </div>
       <h1 style={{ fontSize: 38, fontWeight: 300, letterSpacing: '-0.02em', margin: '0 0 16px',
                    color: 'var(--fg-0)' }}>
@@ -176,6 +177,7 @@ function ScanningScreen({ token, onDone }) {
   const [logLines, setLogLines] = useState([])
   const [progress, setProgress] = useState(0)
   const [error, setError] = useState(null)
+  const [warning, setWarning] = useState(null)
   const doneRef = useRef(false)
 
   const addLine = (line, color = 'var(--fg-1)') => {
@@ -217,10 +219,14 @@ function ScanningScreen({ token, onDone }) {
 
         // Classify each repo with pulse check
         const mapped = []
+        let partialFailures = 0
+        let rateLimitResetAt = null
         for (let i = 0; i < rawRepos.length; i++) {
           if (cancelled) return
           const r = rawRepos[i]
           const insights = await getRepoInsights(token, r.owner.login, r.name)
+          if (insights.incomplete) partialFailures += 1
+          if (insights.rateLimit?.resetAt) rateLimitResetAt = insights.rateLimit.resetAt
           const mapped_r = mapGitHubRepo(r, insights)
           mapped.push(mapped_r)
 
@@ -244,6 +250,14 @@ function ScanningScreen({ token, onDone }) {
         addLine('> cause-of-death analysis · complete', 'var(--vital)')
         setProgress(95)
         await sleep(300)
+        if (partialFailures > 0) {
+          const resetLabel = rateLimitResetAt
+            ? ` · rate limit resets ${new Date(rateLimitResetAt).toLocaleTimeString('en-US', { hour12: false })}`
+            : ''
+          addLine(`> ${partialFailures} repo scan(s) incomplete${resetLabel}`, 'var(--warn)')
+          setWarning({ partialFailures, rateLimitResetAt })
+          await sleep(250)
+        }
         addLine('', '')
         addLine('> scan complete · preparing report', 'var(--vital)')
         setProgress(100)
@@ -316,6 +330,11 @@ function ScanningScreen({ token, onDone }) {
           )}
         </pre>
       </div>
+      {warning && (
+        <div style={{ marginTop: 14, fontFamily: 'var(--mono)', fontSize: 10, color: 'var(--warn)' }}>
+          {warning.partialFailures} repo scan(s) were only partially enriched. Available results are still usable.
+        </div>
+      )}
       <style>{`@keyframes blink { 50% { opacity: 0; } }`}</style>
     </div>
   )

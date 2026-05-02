@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, Menu, shell } = require('electron')
+const { app, BrowserWindow, ipcMain, Menu, safeStorage, shell } = require('electron')
 const fs = require('fs')
 const path = require('path')
 
@@ -41,6 +41,15 @@ ipcMain.handle('shell:open-external', async (_event, url) => {
     throw new Error('Invalid external URL')
   }
   await shell.openExternal(url)
+})
+ipcMain.handle('auth:get-github-session', async () => readGitHubSession())
+ipcMain.handle('auth:set-github-session', async (_event, session) => {
+  writeGitHubSession(session)
+  return true
+})
+ipcMain.handle('auth:clear-github-session', async () => {
+  clearGitHubSession()
+  return true
 })
 
 // GitHub OAuth — token exchange happens here so client_secret never reaches renderer
@@ -93,4 +102,42 @@ function loadLocalEnv() {
       process.env[key] = value
     }
   }
+}
+
+function getGitHubSessionPath() {
+  return path.join(app.getPath('userData'), 'github-session.json')
+}
+
+function readGitHubSession() {
+  try {
+    const filePath = getGitHubSessionPath()
+    if (!fs.existsSync(filePath)) return null
+
+    const raw = JSON.parse(fs.readFileSync(filePath, 'utf8'))
+    if (raw.encrypted && raw.data) {
+      const decrypted = safeStorage.decryptString(Buffer.from(raw.data, 'base64'))
+      return JSON.parse(decrypted)
+    }
+    return raw.data ?? null
+  } catch {
+    return null
+  }
+}
+
+function writeGitHubSession(session) {
+  const filePath = getGitHubSessionPath()
+  fs.mkdirSync(path.dirname(filePath), { recursive: true })
+
+  if (safeStorage.isEncryptionAvailable()) {
+    const encrypted = safeStorage.encryptString(JSON.stringify(session)).toString('base64')
+    fs.writeFileSync(filePath, JSON.stringify({ encrypted: true, data: encrypted }), 'utf8')
+    return
+  }
+
+  fs.writeFileSync(filePath, JSON.stringify({ encrypted: false, data: session }), 'utf8')
+}
+
+function clearGitHubSession() {
+  const filePath = getGitHubSessionPath()
+  if (fs.existsSync(filePath)) fs.unlinkSync(filePath)
 }

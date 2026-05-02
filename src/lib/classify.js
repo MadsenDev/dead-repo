@@ -72,6 +72,39 @@ export function computeLifespan(createdAt, lastPushed) {
   return mo > 0 ? `${yrs}y ${mo}mo` : `${yrs}y`
 }
 
+function getActivityRange(commitActivity, fallbackLastCommit) {
+  if (!Array.isArray(commitActivity) || commitActivity.length === 0) return null
+  const activeWeeks = commitActivity.filter(week => (week.total || 0) > 0 && week.week)
+  if (activeWeeks.length === 0) return null
+
+  const firstWeek = activeWeeks[0]
+  const lastWeek = activeWeeks[activeWeeks.length - 1]
+  const firstCommit = new Date(firstWeek.week * 1000).toISOString().slice(0, 10)
+  const lastCommit = fallbackLastCommit || new Date(lastWeek.week * 1000).toISOString().slice(0, 10)
+
+  return {
+    firstCommit,
+    lastCommit,
+    lifespan: computeLifespan(firstCommit, lastCommit),
+  }
+}
+
+function resolveCommitRange(ghRepo, insights = {}) {
+  const commitSpan = insights.commitSpan ?? null
+  if (commitSpan?.firstCommit && commitSpan?.lastCommit) {
+    return {
+      firstCommit: commitSpan.firstCommit,
+      lastCommit: commitSpan.lastCommit,
+      lifespan: computeLifespan(commitSpan.firstCommit, commitSpan.lastCommit),
+    }
+  }
+
+  const activityRange = getActivityRange(insights.commitActivity ?? null, ghRepo.pushed_at.slice(0, 10))
+  if (activityRange) return activityRange
+
+  return null
+}
+
 export function generateSparkline(commitActivity, state) {
   if (Array.isArray(commitActivity) && commitActivity.length > 0) {
     return commitActivity.slice(-30).map(w => w.total)
@@ -215,11 +248,14 @@ export function reclassifyMappedRepo(repo, thresholds) {
 export function mapGitHubRepo(ghRepo, insights = {}, thresholds) {
   const commitActivity = insights.commitActivity ?? null
   const lastCommit = insights.lastCommit ?? null
+  const lastCommitDate = ghRepo.pushed_at.slice(0, 10)
+  const activityRange = resolveCommitRange(ghRepo, insights)
   const state = classifyState(ghRepo, thresholds)
   const isDead = state === 'dead' || state === 'flatlined'
   const causes = isDead ? diagnoseCause(ghRepo, commitActivity) : null
   const prs = insights.prs ?? null
   const issues = prs == null ? ghRepo.open_issues_count : Math.max(0, ghRepo.open_issues_count - prs)
+  const dependencySnapshot = insights.dependencySnapshot ?? null
 
   return {
     id: `gh-${ghRepo.id}`,
@@ -234,9 +270,12 @@ export function mapGitHubRepo(ghRepo, insights = {}, thresholds) {
     forks: ghRepo.forks_count,
     issues,
     prs,
-    lifespan: computeLifespan(ghRepo.created_at, ghRepo.pushed_at),
+    lifespan: activityRange?.lifespan || computeLifespan(ghRepo.created_at, ghRepo.pushed_at),
     firstCommit: ghRepo.created_at.slice(0, 10),
-    lastCommit: ghRepo.pushed_at.slice(0, 10),
+    lastCommit: lastCommitDate,
+    activeFirstCommit: activityRange?.firstCommit || null,
+    activeLastCommit: activityRange?.lastCommit || lastCommitDate,
+    activeLifespan: activityRange?.lifespan || null,
     commitsTotal: Array.isArray(commitActivity) ? commitActivity.reduce((sum, week) => sum + (week.total || 0), 0) : null,
     commitsLast30: Array.isArray(commitActivity) ? commitActivity.slice(-4).reduce((sum, week) => sum + (week.total || 0), 0) : null,
     contributors: insights.contributors ?? null,
@@ -249,8 +288,9 @@ export function mapGitHubRepo(ghRepo, insights = {}, thresholds) {
     timeOfDeath: isDead ? ghRepo.pushed_at.slice(0, 10) : null,
     declared: ghRepo.archived ? ghRepo.updated_at.slice(0, 10) : null,
     lastWords: lastCommit?.commit?.message?.split('\n')[0] ?? null,
-    deps: null,
-    depsOutdated: null,
+    deps: dependencySnapshot?.deps ?? null,
+    depsOutdated: dependencySnapshot?.depsOutdated ?? null,
+    depsSource: dependencySnapshot?.source ?? null,
     license: ghRepo.license?.spdx_id || 'none',
     survivedBy: ghRepo.forks_count > 0 ? [`${ghRepo.forks_count} fork(s) on GitHub`] : [],
     sourceArchived: ghRepo.archived,

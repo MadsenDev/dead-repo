@@ -4,7 +4,7 @@ import { VOICES } from '../data/voices'
 
 export function SettingsPage({ voice, voiceKey, onPickVoice, accent, onAccent, density, onDensity,
                                githubUser, isLive, syncing, onDisconnect, onConnect, onResync,
-                               thresholds, onThresholdsChange }) {
+                               thresholds, onThresholdsChange, githubNotice, cacheMeta }) {
   const personas = [
     { key: 'neutral', voice: VOICES.neutral },
     { key: 'monday', voice: VOICES.monday },
@@ -119,6 +119,20 @@ export function SettingsPage({ voice, voiceKey, onPickVoice, accent, onAccent, d
                 <div style={{ fontFamily: 'var(--mono)', fontSize: 10, color: 'var(--fg-3)', marginTop: 2 }}>
                   {syncing ? 'syncing repositories…' : `github.com/${githubUser?.login ?? '—'} · scope: repo, read:user, read:org`}
                 </div>
+                {cacheMeta?.savedAt && (
+                  <div style={{ fontFamily: 'var(--mono)', fontSize: 10, color: 'var(--fg-3)', marginTop: 6 }}>
+                    Last scan: {new Date(cacheMeta.savedAt).toLocaleString('en-US', { hour12: false })}
+                  </div>
+                )}
+                {githubNotice && (
+                  <div style={{ fontFamily: 'var(--mono)', fontSize: 10, color: githubNotice.kind === 'error' || githubNotice.kind === 'rate-limit' ? 'var(--warn)' : 'var(--fg-2)', marginTop: 6 }}>
+                    {githubNotice.kind === 'rate-limit'
+                      ? `Rate limited${githubNotice.resetAt ? ` until ${new Date(githubNotice.resetAt).toLocaleTimeString('en-US', { hour12: false })}` : ''}. Partial results remain available.`
+                      : githubNotice.kind === 'partial'
+                      ? `${githubNotice.failures} repo scan(s) only partially enriched.`
+                      : githubNotice.message}
+                  </div>
+                )}
               </div>
               <button className="btn" onClick={onResync} disabled={syncing}
                       style={{ opacity: syncing ? 0.4 : 1 }}>
