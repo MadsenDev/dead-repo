@@ -1,0 +1,32 @@
+# dependencies
+node_modules/
+
+# build output
+dist/
+dist-electron/
+release/
+
+# electron builder
+out/
+
+# env / secrets
+.env
+.env.*
+!.env.example
+
+# logs
+*.log
+npm-debug.log*
+
+# editor
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# vite
+.vite/
