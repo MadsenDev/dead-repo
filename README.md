@@ -4,7 +4,7 @@
 
 Dead Repo monitors the vital signs of every project on your GitHub account — classifying, autopsying, and issuing death certificates for the ones that didn't make it.
 
-![Dead Repo screenshot](https://placeholder)
+![Dead Repo — autopsy view](screenshot.png)
 
 ## Features
 
