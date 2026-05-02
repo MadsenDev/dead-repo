@@ -1,6 +1,12 @@
 const BASE = 'https://api.github.com'
 const MS_DAY = 86400000
 
+function proxyUrl(path) {
+  const base = import.meta.env.VITE_GITHUB_PROXY_URL?.replace(/\/$/, '')
+  if (!base) throw new Error('VITE_GITHUB_PROXY_URL is not set')
+  return `${base}${path}`
+}
+
 function daysSince(dateStr) {
   return (Date.now() - new Date(dateStr).getTime()) / MS_DAY
 }
@@ -31,6 +37,18 @@ async function ghRequest(path, token) {
       Accept: 'application/vnd.github+json',
       'X-GitHub-Api-Version': '2022-11-28',
     },
+  })
+  return res
+}
+
+async function postForm(url, body) {
+  const res = await fetch(url, {
+    method: 'POST',
+    headers: {
+      Accept: 'application/json',
+      'Content-Type': 'application/x-www-form-urlencoded',
+    },
+    body: new URLSearchParams(body),
   })
   return res
 }
@@ -74,6 +92,28 @@ async function getPagedCount(path, token) {
 
 export async function getUser(token) {
   return ghFetch('/user', token)
+}
+
+export async function startDeviceFlow(clientId, scope = 'repo read:user read:org') {
+  const res = await postForm(proxyUrl('/device/code'), { client_id: clientId, scope })
+  if (!res.ok) {
+    const msg = await res.text().catch(() => res.statusText)
+    throw new Error(`Device flow failed: ${msg}`)
+  }
+  return res.json()
+}
+
+export async function pollDeviceFlow(clientId, deviceCode) {
+  const res = await postForm(proxyUrl('/access_token'), {
+    client_id: clientId,
+    device_code: deviceCode,
+    grant_type: 'urn:ietf:params:oauth:grant-type:device_code',
+  })
+  if (!res.ok) {
+    const msg = await res.text().catch(() => res.statusText)
+    throw new Error(`Device flow poll failed: ${msg}`)
+  }
+  return res.json()
 }
 
 export async function getUserRepos(token, onProgress) {
@@ -156,7 +196,8 @@ async function getRepoFileText(token, owner, repo, filePath) {
   try {
     const data = await ghFetch(`/repos/${owner}/${repo}/contents/${encodeURIComponent(filePath)}`, token)
     if (!data?.content) return null
-    return Buffer.from(data.content, 'base64').toString('utf8')
+    const binary = atob(data.content.replace(/\s/g, ''))
+    return new TextDecoder().decode(Uint8Array.from(binary, c => c.charCodeAt(0)))
   } catch (error) {
     if (error?.isRateLimit) throw error
     return null
@@ -204,7 +245,13 @@ function countGoDependencies(text) {
 }
 
 async function getDependencySnapshot(token, owner, repo) {
-  const packageJson = await getRepoFileText(token, owner, repo, 'package.json')
+  const [packageJson, requirements, cargo, goMod] = await Promise.all([
+    getRepoFileText(token, owner, repo, 'package.json'),
+    getRepoFileText(token, owner, repo, 'requirements.txt'),
+    getRepoFileText(token, owner, repo, 'Cargo.toml'),
+    getRepoFileText(token, owner, repo, 'go.mod'),
+  ])
+
   if (packageJson) {
     try {
       const pkg = JSON.parse(packageJson)
@@ -217,23 +264,32 @@ async function getDependencySnapshot(token, owner, repo) {
       return null
     }
   }
-
-  const requirements = await getRepoFileText(token, owner, repo, 'requirements.txt')
-  if (requirements) {
-    return { deps: countRequirementsLines(requirements), depsOutdated: null, source: 'requirements.txt' }
-  }
-
-  const cargo = await getRepoFileText(token, owner, repo, 'Cargo.toml')
-  if (cargo) {
-    return { deps: countCargoDependencies(cargo), depsOutdated: null, source: 'Cargo.toml' }
-  }
-
-  const goMod = await getRepoFileText(token, owner, repo, 'go.mod')
-  if (goMod) {
-    return { deps: countGoDependencies(goMod), depsOutdated: null, source: 'go.mod' }
-  }
-
+  if (requirements) return { deps: countRequirementsLines(requirements), depsOutdated: null, source: 'requirements.txt' }
+  if (cargo) return { deps: countCargoDependencies(cargo), depsOutdated: null, source: 'Cargo.toml' }
+  if (goMod) return { deps: countGoDependencies(goMod), depsOutdated: null, source: 'go.mod' }
   return null
+}
+
+export async function getRepoLanguages(token, owner, repo) {
+  try {
+    const data = await ghFetch(`/repos/${owner}/${repo}/languages`, token)
+    return data && typeof data === 'object' ? data : null
+  } catch (error) {
+    if (error?.isRateLimit) throw error
+    return null
+  }
+}
+
+export async function getRepoChangelog(token, owner, repo) {
+  const names = ['CHANGELOG.md', 'CHANGELOG', 'changelog.md', 'HISTORY.md', 'RELEASES.md']
+  const results = await Promise.all(
+    names.map(name =>
+      getRepoFileText(token, owner, repo, name)
+        .then(text => text ? { text, filename: name } : null)
+        .catch(() => null)
+    )
+  )
+  return results.find(Boolean) || null
 }
 
 export async function getRepoFileActivity(token, owner, repo) {

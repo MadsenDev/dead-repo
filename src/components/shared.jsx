@@ -116,8 +116,15 @@ export function RepoTable({ repos, voice, onOpen }) {
           <tr key={r.id} onClick={() => onOpen(r.id)}>
             <td className="name">
               <span className="lang-dot" style={{ background: r.langColor }} />{r.name}
-              <div style={{ fontFamily: 'var(--sans)', fontWeight: 400, color: 'var(--fg-3)', fontSize: 11, marginTop: 2 }}>
-                {r.description}
+              <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, marginTop: 3, flexWrap: 'wrap' }}>
+                <span style={{ fontFamily: 'var(--mono)', fontSize: 9, color: r.langColor, opacity: 0.9, flexShrink: 0 }}>
+                  {r.lang}
+                </span>
+                {r.description && (
+                  <span style={{ fontFamily: 'var(--sans)', fontWeight: 400, color: 'var(--fg-3)', fontSize: 11 }}>
+                    {r.description}
+                  </span>
+                )}
               </div>
             </td>
             <td><StatePill state={r.state} voice={voice} /></td>

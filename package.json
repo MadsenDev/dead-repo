@@ -2,11 +2,10 @@
   "name": "dead-repo",
   "version": "0.1.0",
   "description": "Autopsy your abandoned GitHub repositories",
-  "main": "electron/main.cjs",
   "type": "module",
   "scripts": {
-    "dev": "concurrently -k \"vite\" \"wait-on http://localhost:5173 && electron .\"",
-    "build": "vite build && electron-builder",
+    "dev": "vite",
+    "build": "vite build",
     "preview": "vite preview",
     "test": "node --test"
   },
@@ -16,16 +15,6 @@
   },
   "devDependencies": {
     "@vitejs/plugin-react": "^6.0.1",
-    "concurrently": "^9.2.1",
-    "electron": "^41.5.0",
-    "electron-builder": "^26.8.1",
-    "vite": "^8.0.10",
-    "wait-on": "^9.0.5"
-  },
-  "build": {
-    "appId": "com.deadrepo.app",
-    "productName": "Dead Repo",
-    "files": ["dist/**/*", "electron/**/*"],
-    "directories": { "output": "release" }
+    "vite": "^8.0.10"
   }
 }

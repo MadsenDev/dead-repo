@@ -2,7 +2,7 @@
 
 ## Priority 1
 
-- Rework GitHub auth so the shipped desktop app does not depend on a protected client secret.
+- Decide on a hosted production auth/session strategy for the web app so "Login with GitHub" can exist without manual token entry.
 
 ## Priority 2
 

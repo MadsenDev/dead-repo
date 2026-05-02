@@ -23,6 +23,18 @@ function getStoredToken() {
   try { return localStorage.getItem('github_token') } catch { return null }
 }
 
+function setStoredToken(token) {
+  try {
+    localStorage.setItem('github_token', token)
+  } catch {
+    // ignore token write failures
+  }
+}
+
+function clearStoredToken() {
+  try { localStorage.removeItem('github_token') } catch {}
+}
+
 function getStoredRepoCache() {
   try {
     return JSON.parse(localStorage.getItem('github_repo_cache') || 'null')
@@ -84,41 +96,20 @@ export default function App() {
   const [showOnboarding, setShowOnboarding] = useState(false)
 
   useEffect(() => {
-    let cancelled = false
+    const token = getStoredToken()
+    const cache = getStoredRepoCache()
 
-    const loadAuth = async () => {
-      const localToken = getStoredToken()
-      try {
-        const session = await window.electronAPI?.getGitHubSession?.()
-        const token = session?.token || localToken
-        const cache = getStoredRepoCache()
-        if (localToken && !session?.token) {
-          await window.electronAPI?.setGitHubSession?.({ token: localToken })
-        }
-        localStorage.removeItem('github_token')
-
-        if (cancelled) return
-        setGithubToken(token || null)
-        if (token && cache?.repos?.length >= 0) {
-          setLiveRepos(cache.repos || [])
-          setCacheMeta(cache.meta || null)
-          if (cache.user) {
-            setGithubUser(cache.user)
-            localStorage.setItem('github_user', JSON.stringify(cache.user))
-          }
-        }
-        setShowOnboarding(!token && !localStorage.getItem('github_dismissed'))
-      } catch {
-        if (cancelled) return
-        setGithubToken(localToken || null)
-        setShowOnboarding(!localToken && !localStorage.getItem('github_dismissed'))
-      } finally {
-        if (!cancelled) setAuthReady(true)
+    setGithubToken(token || null)
+    if (token && cache?.repos?.length >= 0) {
+      setLiveRepos(cache.repos || [])
+      setCacheMeta(cache.meta || null)
+      if (cache.user) {
+        setGithubUser(cache.user)
+        localStorage.setItem('github_user', JSON.stringify(cache.user))
       }
     }
-
-    loadAuth()
-    return () => { cancelled = true }
+    setShowOnboarding(!token && !localStorage.getItem('github_dismissed'))
+    setAuthReady(true)
   }, [])
 
   // Auto-fetch repos whenever we have a token but no live data
@@ -138,7 +129,6 @@ export default function App() {
         if (user) {
           setGithubUser(user)
           localStorage.setItem('github_user', JSON.stringify(user))
-          await window.electronAPI?.setGitHubSession?.({ token: githubToken })
         }
         const enriched = await enrichRepos(githubToken, rawRepos || [])
         if (cancelled) return
@@ -164,10 +154,13 @@ export default function App() {
       } catch (error) {
         if (!cancelled) {
           if (error?.isAuthFailure) {
+            clearStoredToken()
             localStorage.removeItem('github_user')
-            await window.electronAPI?.clearGitHubSession?.()
+            clearRepoCache()
             setGithubToken(null)
             setGithubUser(null)
+            setLiveRepos(null)
+            setCacheMeta(null)
             setShowOnboarding(true)
           } else {
             setGithubNotice({
@@ -242,7 +235,7 @@ export default function App() {
 
   const handleOnboardingComplete = (token, repos) => {
     if (token) {
-      window.electronAPI?.setGitHubSession?.({ token })
+      setStoredToken(token)
       setGithubToken(token)
     } else {
       localStorage.setItem('github_dismissed', '1')
@@ -253,9 +246,9 @@ export default function App() {
   }
 
   const handleDisconnect = () => {
+    clearStoredToken()
     localStorage.removeItem('github_user')
     localStorage.removeItem('github_dismissed')
-    window.electronAPI?.clearGitHubSession?.()
     clearRepoCache()
     setGithubToken(null)
     setGithubUser(null)
@@ -303,15 +296,11 @@ export default function App() {
   return (
     <div className="app">
       <div className="titlebar">
-        <div className="titlebar-lights" style={{ WebkitAppRegion: 'no-drag' }}>
-          <div className="titlebar-light r" onClick={() => window.electronAPI?.close()} title="Close" />
-          <div className="titlebar-light y" onClick={() => window.electronAPI?.minimize()} title="Minimize" />
-          <div className="titlebar-light g" onClick={() => window.electronAPI?.maximize()} title="Maximize" />
-        </div>
+        <div className="titlebar-brand">◉ web</div>
         <div className="titlebar-title">
           {voiceKey === 'supportive' ? 'our little repo garden 💕' : `DEAD REPO · v${APP_VERSION}`}
         </div>
-        <div className="titlebar-meta" style={{ WebkitAppRegion: 'no-drag' }}>
+        <div className="titlebar-meta">
           <span className="dot" style={{ background: isLive ? 'var(--vital)' : 'var(--fg-3)', boxShadow: isLive ? '0 0 6px var(--vital-glow)' : 'none', animation: isLive ? 'pulse-dot 2.5s ease-in-out infinite' : 'none' }} />
           <span>{syncing ? 'fetching repositories…' : isLive ? `monitoring · ${repos.length} subjects` : 'demo mode'}</span>
           {noticeLabel && (

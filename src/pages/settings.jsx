@@ -117,7 +117,7 @@ export function SettingsPage({ voice, voiceKey, onPickVoice, accent, onAccent, d
                   {githubUser?.login ?? 'connected'}
                 </div>
                 <div style={{ fontFamily: 'var(--mono)', fontSize: 10, color: 'var(--fg-3)', marginTop: 2 }}>
-                  {syncing ? 'syncing repositories…' : `github.com/${githubUser?.login ?? '—'} · scope: repo, read:user, read:org`}
+                  {syncing ? 'syncing repositories…' : `github.com/${githubUser?.login ?? '—'} · browser session`}
                 </div>
                 {cacheMeta?.savedAt && (
                   <div style={{ fontFamily: 'var(--mono)', fontSize: 10, color: 'var(--fg-3)', marginTop: 6 }}>
@@ -148,7 +148,7 @@ export function SettingsPage({ voice, voiceKey, onPickVoice, accent, onAccent, d
               <div style={{ flex: 1 }}>
                 <div style={{ fontFamily: 'var(--mono)', fontSize: 13, color: 'var(--fg-2)' }}>Not connected</div>
                 <div style={{ fontFamily: 'var(--mono)', fontSize: 10, color: 'var(--fg-3)', marginTop: 2 }}>
-                  Running on demo data
+                  Running on demo data or waiting for a GitHub token
                 </div>
               </div>
               <button className="btn" onClick={onConnect}>Connect GitHub</button>

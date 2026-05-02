@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import { EkgLine } from '../components/shared'
-import { getRepoInsights, getUser, getUserRepos } from '../lib/github'
+import { getRepoInsights, getUser, getUserRepos, startDeviceFlow, pollDeviceFlow } from '../lib/github'
 import { mapGitHubRepo } from '../lib/classify'
 import { APP_VERSION } from '../lib/version'
 
@@ -64,106 +64,317 @@ function WelcomeScreen({ onNext }) {
 
 // ── Connect ───────────────────────────────────────────
 function ConnectScreen({ onConnect, onSkip }) {
-  const [status, setStatus] = useState('idle') // idle | waiting | error
+  const [mode, setMode] = useState('idle') // idle | requesting | awaiting | pat | error
+  const [patToken, setPatToken] = useState('')
+  const [deviceData, setDeviceData] = useState(null)
   const [errorMsg, setErrorMsg] = useState('')
+  const [copied, setCopied] = useState(false)
+  const pollTimer = useRef(null)
+  const cancelled = useRef(false)
 
-  const handleAuthorize = async () => {
-    if (!window.electronAPI) {
-      setStatus('error')
-      setErrorMsg('GitHub auth requires the desktop app. Running in browser.')
-      return
+  const clientId = import.meta.env.VITE_GITHUB_CLIENT_ID
+  const hasProxy = !!import.meta.env.VITE_GITHUB_PROXY_URL
+  const canDeviceFlow = clientId && hasProxy
+
+  useEffect(() => {
+    cancelled.current = false
+    return () => {
+      cancelled.current = true
+      clearTimeout(pollTimer.current)
     }
-    setStatus('waiting')
+  }, [])
+
+  const startDevice = async () => {
+    setMode('requesting')
+    setErrorMsg('')
     try {
-      const token = await window.electronAPI.startGitHubAuth()
-      if (token) onConnect(token)
-      else throw new Error('No token returned')
+      const data = await startDeviceFlow(clientId)
+      if (cancelled.current) return
+      setDeviceData(data)
+      setMode('awaiting')
+      schedulePoll(data.device_code, data.interval || 5)
     } catch (err) {
-      setStatus('error')
-      setErrorMsg(err.message || 'Authorization failed')
+      if (!cancelled.current) { setErrorMsg(err.message); setMode('error') }
     }
   }
 
-  const handleCancel = () => {
-    window.electronAPI?.cancelGitHubAuth()
-    setStatus('idle')
+  const schedulePoll = (deviceCode, interval) => {
+    pollTimer.current = setTimeout(async () => {
+      if (cancelled.current) return
+      try {
+        const result = await pollDeviceFlow(clientId, deviceCode)
+        if (cancelled.current) return
+        if (result.access_token) {
+          onConnect(result.access_token)
+        } else if (result.error === 'slow_down') {
+          schedulePoll(deviceCode, interval + 5)
+        } else if (result.error === 'expired_token') {
+          setErrorMsg('Authorization code expired. Please try again.')
+          setMode('error')
+        } else if (result.error === 'access_denied') {
+          setErrorMsg('Authorization cancelled.')
+          setMode('error')
+        } else {
+          schedulePoll(deviceCode, interval)
+        }
+      } catch (err) {
+        if (!cancelled.current) { setErrorMsg(err.message); setMode('error') }
+      }
+    }, interval * 1000)
   }
 
-  return (
-    <div style={{ maxWidth: 480, width: '100%', padding: 40 }}>
-      <div style={{ fontFamily: 'var(--mono)', fontSize: 10, letterSpacing: '0.20em',
-                    color: 'var(--fg-3)', textTransform: 'uppercase', marginBottom: 14 }}>
-        Step 01 of 03 · Authorization
+  const copyCode = () => {
+    navigator.clipboard.writeText(deviceData.user_code).catch(() => {})
+    setCopied(true)
+    setTimeout(() => setCopied(false), 2000)
+  }
+
+  const handlePatSubmit = () => {
+    if (patToken.trim()) onConnect(patToken.trim())
+  }
+
+  const crumb = (
+    <div style={{ fontFamily: 'var(--mono)', fontSize: 10, letterSpacing: '0.20em',
+                  color: 'var(--fg-3)', textTransform: 'uppercase', marginBottom: 14 }}>
+      Step 01 of 03 · Authorization
+    </div>
+  )
+
+  const scopePanel = (
+    <div className="panel" style={{ padding: 20, marginBottom: 24 }}>
+      <div style={{ fontFamily: 'var(--mono)', fontSize: 10, color: 'var(--fg-3)',
+                    textTransform: 'uppercase', letterSpacing: '0.10em', marginBottom: 10 }}>
+        Permissions requested
       </div>
-      <h2 style={{ fontSize: 24, fontWeight: 400, color: 'var(--fg-0)', margin: '0 0 12px' }}>
-        Connect your GitHub.
-      </h2>
-      <p style={{ fontSize: 13, color: 'var(--fg-2)', lineHeight: 1.6, margin: '0 0 28px' }}>
-        Read-only access to repository metadata and activity signals. Authentication must be configured by the desktop app environment.
-      </p>
-
-      <div className="panel" style={{ padding: 20, marginBottom: 20 }}>
-        <div style={{ fontFamily: 'var(--mono)', fontSize: 10, color: 'var(--fg-3)',
-                      textTransform: 'uppercase', letterSpacing: '0.10em', marginBottom: 10 }}>
-          Scopes requested
+      {[
+        { s: 'repo', d: 'Read repository metadata, commits, branches, and manifests' },
+        { s: 'read:user', d: 'Read your profile (name, avatar)' },
+        { s: 'read:org', d: 'List organizations and their repos' },
+      ].map(x => (
+        <div key={x.s} style={{ display: 'flex', alignItems: 'baseline', gap: 12,
+                                padding: '8px 0', borderBottom: '1px dashed var(--line)' }}>
+          <span style={{ fontFamily: 'var(--mono)', fontSize: 11, color: 'var(--vital)', minWidth: 80 }}>{x.s}</span>
+          <span style={{ fontSize: 12, color: 'var(--fg-1)' }}>{x.d}</span>
         </div>
-        {[
-          { s: 'repo', d: 'Read repository metadata, commits, branches' },
-          { s: 'read:user', d: 'Read your profile (name, avatar)' },
-          { s: 'read:org', d: 'List organizations and their repos' },
-        ].map(x => (
-          <div key={x.s} style={{ display: 'flex', alignItems: 'baseline', gap: 12,
-                                  padding: '8px 0', borderBottom: '1px dashed var(--line)' }}>
-            <span style={{ fontFamily: 'var(--mono)', fontSize: 11, color: 'var(--vital)', minWidth: 80 }}>{x.s}</span>
-            <span style={{ fontSize: 12, color: 'var(--fg-1)' }}>{x.d}</span>
-          </div>
-        ))}
-      </div>
+      ))}
+    </div>
+  )
 
-      {status === 'error' && (
-        <div style={{ background: 'var(--crit-faint)', border: '1px solid oklch(0.65 0.20 25 / 0.3)',
-                      borderRadius: 4, padding: '10px 14px', marginBottom: 16,
-                      fontFamily: 'var(--mono)', fontSize: 11, color: 'var(--crit)' }}>
-          ⚠ {errorMsg}
+  if (mode === 'awaiting' && deviceData) {
+    return (
+      <div style={{ maxWidth: 480, width: '100%', padding: 40 }}>
+        {crumb}
+        <h2 style={{ fontSize: 24, fontWeight: 400, color: 'var(--fg-0)', margin: '0 0 10px' }}>
+          Authorize in GitHub.
+        </h2>
+        <p style={{ fontSize: 13, color: 'var(--fg-2)', lineHeight: 1.6, margin: '0 0 28px' }}>
+          Open the link below and enter this code when prompted.
+        </p>
+
+        <div style={{ textAlign: 'center', marginBottom: 24 }}>
+          <div onClick={copyCode} style={{
+            fontFamily: 'var(--mono)', fontSize: 40, fontWeight: 300, letterSpacing: '0.18em',
+            color: 'var(--vital)', padding: '22px 40px',
+            border: '2px solid oklch(0.78 0.16 152 / 0.4)', borderRadius: 6,
+            background: 'oklch(0.78 0.16 152 / 0.05)',
+            cursor: 'default', display: 'inline-block', marginBottom: 8,
+            boxShadow: '0 0 40px oklch(0.78 0.16 152 / 0.08)',
+          }}>
+            {deviceData.user_code}
+          </div>
+          <div style={{ fontFamily: 'var(--mono)', fontSize: 10, color: copied ? 'var(--vital)' : 'var(--fg-3)' }}>
+            {copied ? '✓ copied' : 'click to copy'}
+          </div>
         </div>
-      )}
 
-      {status === 'waiting' ? (
-        <div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 14,
-                        fontFamily: 'var(--mono)', fontSize: 12, color: 'var(--fg-2)' }}>
-            <span style={{ width: 8, height: 8, borderRadius: '50%', background: 'var(--vital)',
-                           boxShadow: '0 0 8px var(--vital-glow)', animation: 'pulse-dot 1.5s ease-in-out infinite' }} />
-            Waiting for GitHub authorization in browser…
-          </div>
-          <button onClick={handleCancel} className="btn ghost"
-                  style={{ width: '100%', height: 40, fontSize: 12 }}>
-            Cancel
+        <a href={deviceData.verification_uri} target="_blank" rel="noreferrer"
+           style={{
+             display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10,
+             width: '100%', height: 44, border: '1px solid var(--line-3)',
+             background: 'var(--bg-2)', color: 'var(--fg-0)',
+             fontFamily: 'var(--sans)', fontSize: 13, borderRadius: 4,
+             textDecoration: 'none', marginBottom: 18,
+           }}
+           onMouseEnter={e => e.currentTarget.style.background = 'var(--bg-3)'}
+           onMouseLeave={e => e.currentTarget.style.background = 'var(--bg-2)'}>
+          Open {deviceData.verification_uri} ↗
+        </a>
+
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 24,
+                      fontFamily: 'var(--mono)', fontSize: 11, color: 'var(--fg-3)' }}>
+          <span style={{ width: 8, height: 8, borderRadius: '50%', background: 'var(--vital)', flexShrink: 0,
+                         animation: 'pulse-dot 1.5s ease-in-out infinite', boxShadow: '0 0 6px var(--vital-glow)' }} />
+          Waiting for authorization…
+        </div>
+
+        <div style={{ display: 'flex', gap: 10 }}>
+          <button onClick={onSkip} className="btn ghost" style={{ fontSize: 11 }}>
+            Skip — use demo data
+          </button>
+          <button onClick={() => { clearTimeout(pollTimer.current); setMode('pat') }}
+                  className="btn ghost" style={{ fontSize: 11 }}>
+            Use a token instead
           </button>
         </div>
-      ) : (
-        <button onClick={handleAuthorize}
+      </div>
+    )
+  }
+
+  if (mode === 'pat') {
+    return (
+      <div style={{ maxWidth: 480, width: '100%', padding: 40 }}>
+        {crumb}
+        <h2 style={{ fontSize: 24, fontWeight: 400, color: 'var(--fg-0)', margin: '0 0 10px' }}>
+          Personal access token.
+        </h2>
+        <p style={{ fontSize: 13, color: 'var(--fg-2)', lineHeight: 1.6, margin: '0 0 20px' }}>
+          Create a token at github.com/settings/tokens with <code style={{ fontFamily: 'var(--mono)', fontSize: 11 }}>repo</code>, <code style={{ fontFamily: 'var(--mono)', fontSize: 11 }}>read:user</code>, and <code style={{ fontFamily: 'var(--mono)', fontSize: 11 }}>read:org</code> scopes.
+        </p>
+        <div style={{ marginBottom: 16 }}>
+          <textarea value={patToken} onChange={e => setPatToken(e.target.value)}
+            placeholder="ghp_... or github_pat_..." spellCheck={false}
+            style={{
+              width: '100%', minHeight: 100, resize: 'vertical',
+              background: 'var(--bg-2)', border: '1px solid var(--line-3)', borderRadius: 4,
+              color: 'var(--fg-0)', fontFamily: 'var(--mono)', fontSize: 12,
+              padding: 12, outline: 'none',
+            }} />
+        </div>
+        <button onClick={handlePatSubmit}
                 style={{
                   width: '100%', height: 44, border: '1px solid var(--line-3)',
                   background: 'var(--bg-2)', color: 'var(--fg-0)',
                   fontFamily: 'var(--sans)', fontSize: 13, borderRadius: 4,
-                  cursor: 'default', display: 'flex', alignItems: 'center',
-                  justifyContent: 'center', gap: 10,
+                  cursor: 'default', display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  marginBottom: 14,
                 }}
                 onMouseEnter={e => e.currentTarget.style.background = 'var(--bg-3)'}
                 onMouseLeave={e => e.currentTarget.style.background = 'var(--bg-2)'}>
-          <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
-            <path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/>
-          </svg>
-          Authorize on GitHub
+          Use token and scan
         </button>
-      )}
-
-      <div style={{ fontFamily: 'var(--mono)', fontSize: 10, color: 'var(--fg-3)',
-                    textAlign: 'center', marginTop: 16 }}>
-        Opens github.com/login/oauth in your default browser
+        <div style={{ display: 'flex', gap: 10 }}>
+          {canDeviceFlow && (
+            <button onClick={() => setMode('idle')} className="btn ghost" style={{ fontSize: 11 }}>
+              ← Back
+            </button>
+          )}
+          <button onClick={onSkip} className="btn ghost" style={{ fontSize: 11 }}>
+            Skip — use demo data
+          </button>
+        </div>
       </div>
-      <div style={{ textAlign: 'center', marginTop: 20 }}>
+    )
+  }
+
+  if (mode === 'error') {
+    return (
+      <div style={{ maxWidth: 480, width: '100%', padding: 40 }}>
+        {crumb}
+        <h2 style={{ fontSize: 24, fontWeight: 400, color: 'var(--fg-0)', margin: '0 0 12px' }}>
+          Authorization failed.
+        </h2>
+        <div style={{ background: 'var(--crit-faint)', border: '1px solid oklch(0.65 0.20 25 / 0.3)',
+                      borderRadius: 4, padding: '12px 16px', marginBottom: 24,
+                      fontFamily: 'var(--mono)', fontSize: 11, color: 'var(--crit)' }}>
+          ⚠ {errorMsg}
+        </div>
+        <div style={{ display: 'flex', gap: 10 }}>
+          <button onClick={() => { setErrorMsg(''); setMode('idle') }}
+                  style={{
+                    height: 38, padding: '0 18px', border: '1px solid var(--line-3)',
+                    background: 'var(--bg-2)', color: 'var(--fg-0)',
+                    fontFamily: 'var(--sans)', fontSize: 12, borderRadius: 4, cursor: 'default',
+                  }}>
+            Try again
+          </button>
+          <button onClick={() => setMode('pat')} className="btn ghost" style={{ fontSize: 11 }}>
+            Use a token instead
+          </button>
+          <button onClick={onSkip} className="btn ghost" style={{ fontSize: 11 }}>
+            Use demo data
+          </button>
+        </div>
+      </div>
+    )
+  }
+
+  // idle / requesting
+  if (canDeviceFlow) {
+    return (
+      <div style={{ maxWidth: 480, width: '100%', padding: 40 }}>
+        {crumb}
+        <h2 style={{ fontSize: 24, fontWeight: 400, color: 'var(--fg-0)', margin: '0 0 10px' }}>
+          Connect your GitHub.
+        </h2>
+        <p style={{ fontSize: 13, color: 'var(--fg-2)', lineHeight: 1.6, margin: '0 0 24px' }}>
+          Authorizes read-only access to your repositories. No write permissions.
+        </p>
+        {scopePanel}
+        <button onClick={startDevice} disabled={mode === 'requesting'}
+                style={{
+                  width: '100%', height: 44, border: '1px solid var(--line-3)',
+                  background: mode === 'requesting' ? 'var(--bg-1)' : 'var(--bg-2)',
+                  color: mode === 'requesting' ? 'var(--fg-3)' : 'var(--fg-0)',
+                  fontFamily: 'var(--sans)', fontSize: 13, borderRadius: 4,
+                  cursor: 'default', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10,
+                  marginBottom: 14,
+                }}
+                onMouseEnter={e => { if (mode !== 'requesting') e.currentTarget.style.background = 'var(--bg-3)' }}
+                onMouseLeave={e => { if (mode !== 'requesting') e.currentTarget.style.background = 'var(--bg-2)' }}>
+          {mode === 'requesting' ? (
+            <>
+              <span style={{ width: 8, height: 8, borderRadius: '50%', background: 'var(--fg-3)',
+                             animation: 'pulse-dot 1s ease-in-out infinite' }} />
+              Requesting authorization…
+            </>
+          ) : 'Connect with GitHub →'}
+        </button>
+        <div style={{ display: 'flex', gap: 10 }}>
+          <button onClick={() => setMode('pat')} className="btn ghost" style={{ fontSize: 11 }}>
+            Use a personal access token
+          </button>
+          <button onClick={onSkip} className="btn ghost" style={{ fontSize: 11 }}>
+            Skip — demo data
+          </button>
+        </div>
+      </div>
+    )
+  }
+
+  // No device flow configured — PAT form inline
+  return (
+    <div style={{ maxWidth: 480, width: '100%', padding: 40 }}>
+      {crumb}
+      <h2 style={{ fontSize: 24, fontWeight: 400, color: 'var(--fg-0)', margin: '0 0 10px' }}>
+        Connect your GitHub.
+      </h2>
+      <p style={{ fontSize: 13, color: 'var(--fg-2)', lineHeight: 1.6, margin: '0 0 24px' }}>
+        Paste a GitHub personal access token. It stays in your browser and is never sent anywhere except to the GitHub API.
+      </p>
+      {scopePanel}
+      <div style={{ marginBottom: 16 }}>
+        <textarea value={patToken} onChange={e => setPatToken(e.target.value)}
+          placeholder="ghp_... or github_pat_..." spellCheck={false}
+          style={{
+            width: '100%', minHeight: 100, resize: 'vertical',
+            background: 'var(--bg-2)', border: '1px solid var(--line-3)', borderRadius: 4,
+            color: 'var(--fg-0)', fontFamily: 'var(--mono)', fontSize: 12,
+            padding: 12, outline: 'none',
+          }} />
+      </div>
+      <button onClick={handlePatSubmit}
+              style={{
+                width: '100%', height: 44, border: '1px solid var(--line-3)',
+                background: 'var(--bg-2)', color: 'var(--fg-0)',
+                fontFamily: 'var(--sans)', fontSize: 13, borderRadius: 4,
+                cursor: 'default', display: 'flex', alignItems: 'center', justifyContent: 'center',
+                marginBottom: 14,
+              }}
+              onMouseEnter={e => e.currentTarget.style.background = 'var(--bg-3)'}
+              onMouseLeave={e => e.currentTarget.style.background = 'var(--bg-2)'}>
+        Connect and scan
+      </button>
+      <div style={{ textAlign: 'center' }}>
         <button onClick={onSkip} className="btn ghost" style={{ fontSize: 11 }}>
           Skip — use demo data
         </button>

@@ -6,7 +6,7 @@
 
 - Added repo-local guidance in `AGENTS.md` and `CLAUDE.md` to keep this changelog updated.
 - Added repo-local guidance to track major follow-up work in `TODO.md`.
-- Added `.env.example` and repo-local `.env` / `.env.local` loading in the Electron main process for GitHub OAuth configuration.
+- Added `.env.example` for local GitHub client configuration in web development.
 - Added live GitHub enrichment for per-repo commit activity, last commit message, contributor counts, branch counts, and open pull request counts.
 - Added local scan-result caching with last-scan timestamps so connected sessions can hydrate from cached data before background refresh.
 - Added a built-in `node --test` classification test suite and wired it to `npm test`.
@@ -14,8 +14,10 @@
 
 ### Changed
 
+- Removed the Electron shell and converted the project back to a plain Vite web app.
+- Replaced the removed desktop auth path with a browser-based local-development token flow, and documented that real web "Login with GitHub" still needs a backend or serverless exchange endpoint.
 - Reset the app version from the old mock `2.4.1` branding to `0.1.0` across package metadata and UI copy.
-- Reworked GitHub OAuth so credentials are read from environment configuration instead of being embedded in source.
+- Reworked GitHub sign-in so credentials are read from environment configuration instead of being embedded in source.
 - Made triage thresholds in Settings persist locally and actively reclassify repositories instead of acting as dead controls.
 - Improved connected-mode data quality by preferring real GitHub-backed metrics where available and only falling back for visual-only elements like sparklines.
 - Improved connected-mode dependency reporting by parsing declared dependency counts from common root manifests (`package.json`, `requirements.txt`, `Cargo.toml`, `go.mod`) when available.
@@ -23,7 +25,7 @@
 - Fixed relative date displays and timeline rendering to use the real current date instead of a hardcoded mock date.
 - Fixed lifespan sorting to sort by actual repository lifetime rather than commit-count placeholders.
 - Updated README and connected-mode UI copy to distinguish real GitHub-backed data from estimated or unavailable sections.
-- Centralized app version usage so UI strings and the GitHub OAuth user-agent read from a shared package version source instead of hardcoded literals.
+- Centralized app version usage so UI strings read from a shared package version source instead of hardcoded literals.
 - Reworked the Wrapped report to derive yearly stats, causes, heatmap activity, and longest-survivor summaries from actual repository data instead of fixed mock 2025 values.
 - Refined Wrapped lifespan ranking to prefer actual commit-activity windows over raw repo creation dates when weekly activity data is available.
 - Refined Wrapped lifespan ranking again to prefer actual first/last commit dates from the commits API, avoiding inflated lifespans for repos that were created long before their real work window.
@@ -37,5 +39,5 @@
 - Fixed empty connected GitHub accounts falling back to demo mode instead of showing a valid live empty state.
 - Fixed autopsy and certificate views to handle missing live metrics more honestly instead of presenting fabricated values as real data.
 - Fixed dead UI actions by removing non-functional controls and wiring “View on GitHub” to open externally.
-- Moved the GitHub token out of renderer `localStorage` into Electron-managed persisted storage, with one-time migration for existing local tokens.
+- Standardized GitHub session storage on browser `localStorage` for the web app build.
 - Fixed GitHub sync failure handling so rate limits and partial enrichment no longer behave like expired auth sessions, and partial results remain usable.

@@ -83,7 +83,8 @@ export function DashboardPage({ voice, repos, onOpenRepo, onNav }) {
                     <span className="lang-dot" style={{ background: r.langColor }} />{r.name}
                   </div>
                   <div style={{ fontSize: 11, color: 'var(--fg-3)', marginTop: 2 }}>
-                    Last commit: {relTime(r.lastCommit)}{r.lastWords ? ` · “${r.lastWords.length > 38 ? r.lastWords.slice(0, 36) + '…' : r.lastWords}”` : ''}
+                    <span style={{ color: r.langColor, opacity: 0.85, marginRight: 6 }}>{r.lang}</span>
+                    Last commit: {relTime(r.lastCommit)}{r.lastWords ? ` · "${r.lastWords.length > 38 ? r.lastWords.slice(0, 36) + '…' : r.lastWords}"` : ''}
                   </div>
                 </div>
                 <VitalBar value={r.vitals} />
@@ -109,6 +110,7 @@ export function DashboardPage({ voice, repos, onOpenRepo, onNav }) {
                     <span className="lang-dot" style={{ background: r.langColor }} />{r.name}
                   </div>
                   <div style={{ fontSize: 11, color: 'var(--fg-3)', marginTop: 2 }}>
+                    <span style={{ color: r.langColor, opacity: 0.85, marginRight: 6 }}>{r.lang}</span>
                     Cause: <span style={{ color: 'var(--crit)' }}>{r.cause}</span> · {r.lifespan}
                   </div>
                 </div>

@@ -11,7 +11,7 @@ Dead Repo monitors the vital signs of projects on your GitHub account, classifie
 ### Implemented
 
 - GitHub-connected dashboard with repo lifecycle classification
-- Connected sync with local session storage and local scan-result caching
+- Browser-based local development flow using a GitHub personal access token and local scan-result caching
 - Repo enrichment for commit activity, last commit message, contributor counts, branch counts, and open PR counts
 - Adjustable triage thresholds
 - Death certificate export
@@ -27,7 +27,7 @@ Dead Repo monitors the vital signs of projects on your GitHub account, classifie
 
 - Outdated dependency counts
 - Real file-level decay analysis from repository history
-- Safer desktop-native auth flow that avoids client-secret-based installed-app assumptions
+- Hosted production auth/session strategy for true "Login with GitHub"
 
 ## Features
 
@@ -35,13 +35,13 @@ Dead Repo monitors the vital signs of projects on your GitHub account, classifie
 - **Autopsy view** — differential diagnosis with multi-cause confidence scoring, commit timeline, estimated file activity, dependency section with real manifest counts where available
 - **Death certificates** — printable/exportable, voice-aware, stamped DECEASED
 - **5 personality voices** — Neutral, Monday (brutal), Super Supportive (unhinged), Surfer, Professional
-- **GitHub OAuth** — real live data via read-only scopes (`repo`, `read:user`, `read:org`)
+- **GitHub-connected mode** — real live data via read-only scopes (`repo`, `read:user`, `read:org`)
 - **Year in review** — Wrapped-style breakdown of your year in abandoned projects
 
 ## Stack
 
-- **Electron** + **React** + **Vite**
-- GitHub OAuth via local callback server configured from `.env`
+- **React** + **Vite**
+- Local development token flow with optional future GitHub OAuth client ID
 - CSS custom properties + oklch color system
 - IBM Plex Mono / IBM Plex Sans
 
@@ -50,8 +50,7 @@ Dead Repo monitors the vital signs of projects on your GitHub account, classifie
 ### Prerequisites
 
 - Node.js 18+
-- A GitHub OAuth app ([create one here](https://github.com/settings/developers))
-  - Callback URL: `http://localhost:3000/callback`
+- A GitHub personal access token with `repo`, `read:user`, and `read:org`
 
 ### Install
 
@@ -61,7 +60,7 @@ npm install
 
 ### Configure
 
-Create a local `.env` file from `.env.example` and set your GitHub OAuth credentials:
+Create a local `.env` file from `.env.example` if you want to keep a future GitHub OAuth client ID in local config:
 
 ```bash
 cp .env.example .env
@@ -70,9 +69,7 @@ cp .env.example .env
 Then edit `.env`:
 
 ```bash
-GITHUB_CLIENT_ID=your_client_id
-GITHUB_CLIENT_SECRET=your_client_secret
-GITHUB_REDIRECT_URI=http://localhost:3000/callback
+VITE_GITHUB_CLIENT_ID=your_client_id
 ```
 
 ### Run
@@ -87,7 +84,7 @@ npm run dev
 npm run build
 ```
 
-Output goes to `release/`.
+Output goes to `dist/`.
 
 ## OAuth Scopes
 
@@ -97,7 +94,8 @@ Output goes to `release/`.
 | `read:user` | Read your profile (name, avatar) |
 | `read:org` | List organizations and their repos |
 
-The client secret never reaches the renderer process. It is read by the Electron main process from local environment configuration.
+For local development, the browser app stores the user-supplied GitHub token in local browser storage.
+GitHub's OAuth token endpoints do not allow the browser-only token exchange this app would need for a pure static "Login with GitHub" flow, so a backend or serverless auth endpoint is still required for that production path.
 
 ## Repo Classification
 
@@ -118,6 +116,7 @@ Signals: `Never Started`, `Existential Crisis`, `Experiment / POC`, `Lost Intere
 
 - Connected sessions hydrate from cached scan data first, then refresh in the background.
 - Some sections are intentionally conservative about missing data and will show unavailable or estimated states instead of fabricated live values.
+- This repo is now a web app, not an Electron desktop app.
 
 ## License
 

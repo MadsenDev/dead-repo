@@ -1,5 +1,6 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { EkgLine, RepoTable } from '../components/shared'
+import { LANG_COLORS } from '../lib/classify'
 
 export function ListPage({ voice, page, repos, onOpenRepo }) {
   const config = {
@@ -24,9 +25,20 @@ export function ListPage({ voice, page, repos, onOpenRepo }) {
   const filtered = repos.filter(r => r.state === config.state)
   const [sort, setSort] = useState('last')
   const [q, setQ] = useState('')
+  const [activeLangs, setActiveLangs] = useState(new Set())
+
+  useEffect(() => { setActiveLangs(new Set()); setQ('') }, [page])
+
+  const allLangs = [...new Set(filtered.map(r => r.lang).filter(Boolean))].sort()
+  const toggleLang = (lang) => setActiveLangs(prev => {
+    const next = new Set(prev)
+    next.has(lang) ? next.delete(lang) : next.add(lang)
+    return next
+  })
 
   let view = filtered
-  if (q) view = view.filter(r => r.name.toLowerCase().includes(q.toLowerCase()))
+  if (q) view = view.filter(r => r.name.toLowerCase().includes(q.toLowerCase()) || r.description?.toLowerCase().includes(q.toLowerCase()))
+  if (activeLangs.size > 0) view = view.filter(r => activeLangs.has(r.lang))
   view = [...view].sort((a, b) => {
     if (sort === 'last') return new Date(b.lastCommit) - new Date(a.lastCommit)
     if (sort === 'vitals') return b.vitals - a.vitals
@@ -64,10 +76,47 @@ export function ListPage({ voice, page, repos, onOpenRepo }) {
         </div>
         <div className="search">
           <span style={{ color: 'var(--fg-3)' }}>⌕</span>
-          <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="filter…" />
+          <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="name or description…" />
         </div>
         <div className="meta">{view.length} of {filtered.length}</div>
       </div>
+
+      {allLangs.length > 1 && (
+        <div className="filterbar" style={{ paddingTop: 7, paddingBottom: 7, gap: 6, flexWrap: 'wrap',
+                                            borderTop: 'none', background: 'var(--bg-0)' }}>
+          <span style={{ fontSize: 9, letterSpacing: '0.10em', textTransform: 'uppercase',
+                         color: 'var(--fg-4)', marginRight: 2 }}>Lang</span>
+          {allLangs.map(lang => {
+            const color = LANG_COLORS[lang] || '#666666'
+            const active = activeLangs.has(lang)
+            const count = filtered.filter(r => r.lang === lang).length
+            return (
+              <button key={lang} onClick={() => toggleLang(lang)} style={{
+                display: 'inline-flex', alignItems: 'center', gap: 5,
+                height: 22, padding: '0 9px', borderRadius: 3, cursor: 'default',
+                fontFamily: 'var(--mono)', fontSize: 10,
+                border: `1px solid ${active ? color : 'var(--line)'}`,
+                background: active ? `color-mix(in srgb, ${color} 14%, transparent)` : 'transparent',
+                color: active ? color : 'var(--fg-2)',
+                transition: 'border-color 120ms, color 120ms, background 120ms',
+              }}>
+                <span style={{ width: 6, height: 6, borderRadius: '50%', background: color, flexShrink: 0 }} />
+                {lang}
+                <span style={{ color: active ? color : 'var(--fg-4)', fontSize: 9 }}>{count}</span>
+              </button>
+            )
+          })}
+          {activeLangs.size > 0 && (
+            <button onClick={() => setActiveLangs(new Set())} style={{
+              fontFamily: 'var(--mono)', fontSize: 9, color: 'var(--fg-3)',
+              background: 'transparent', border: '1px solid var(--line)', borderRadius: 3,
+              height: 22, padding: '0 8px', cursor: 'default', marginLeft: 2,
+            }}>
+              clear ✕
+            </button>
+          )}
+        </div>
+      )}
 
       {view.length === 0 ? (
         <div style={{ padding: '60px 32px', textAlign: 'center', fontFamily: 'var(--mono)', color: 'var(--fg-3)' }}>
