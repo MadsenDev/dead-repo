@@ -38,13 +38,18 @@ npm install
 
 ### Configure
 
-Set your GitHub OAuth credentials in the environment before starting the app:
+Create a local `.env` file from `.env.example` and set your GitHub OAuth credentials:
 
 ```bash
-export GITHUB_CLIENT_ID=your_client_id
-export GITHUB_CLIENT_SECRET=your_client_secret
-# optional if you need a non-default callback
-export GITHUB_REDIRECT_URI=http://localhost:3000/callback
+cp .env.example .env
+```
+
+Then edit `.env`:
+
+```bash
+GITHUB_CLIENT_ID=your_client_id
+GITHUB_CLIENT_SECRET=your_client_secret
+GITHUB_REDIRECT_URI=http://localhost:3000/callback
 ```
 
 ### Run

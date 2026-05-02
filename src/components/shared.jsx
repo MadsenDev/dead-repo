@@ -8,7 +8,7 @@ export function EkgLine({ alive = true, width = 320, height = 32 }) {
   useEffect(() => {
     let raf
     const tick = () => {
-      setPhase((p) => (p + 1.2) % 200)
+      setPhase((p) => (p + 0.95) % 240)
       raf = requestAnimationFrame(tick)
     }
     raf = requestAnimationFrame(tick)
@@ -16,27 +16,39 @@ export function EkgLine({ alive = true, width = 320, height = 32 }) {
   }, [])
 
   const points = []
-  const N = 200
+  const N = 240
   const mid = height / 2
+  const amp = Math.max(6, height * 0.34)
   for (let i = 0; i < N; i++) {
     const x = (i / N) * width
     let y = mid
     if (alive) {
       const local = (i - phase + N) % N
-      if (local > 30 && local < 38) y = mid - 3 * Math.sin(((local - 30) / 8) * Math.PI)
-      else if (local === 42) y = mid + 2
-      else if (local === 43) y = mid - 12
-      else if (local === 44) y = mid + 9
-      else if (local === 45) y = mid - 2
-      else if (local > 50 && local < 62) y = mid - 4 * Math.sin(((local - 50) / 12) * Math.PI)
+      if (local > 42 && local < 52) {
+        y = mid - amp * 0.16 * Math.sin(((local - 42) / 10) * Math.PI)
+      } else if (local >= 60 && local < 66) {
+        y = mid + amp * 0.14 * ((local - 60) / 6)
+      } else if (local >= 66 && local < 72) {
+        y = mid + amp * 0.14 - amp * 1.28 * ((local - 66) / 6)
+      } else if (local >= 72 && local < 78) {
+        y = mid - amp * 1.14 + amp * 1.72 * ((local - 72) / 6)
+      } else if (local >= 78 && local < 88) {
+        y = mid + amp * 0.58 - amp * 0.58 * ((local - 78) / 10)
+      } else if (local > 98 && local < 118) {
+        y = mid - amp * 0.28 * Math.sin(((local - 98) / 20) * Math.PI)
+      } else {
+        y = mid + Math.sin((i + phase) * 0.045) * 0.18
+      }
     }
     points.push(`${x.toFixed(1)},${y.toFixed(1)}`)
   }
   const d = 'M' + points.join(' L')
+  const baseline = `M0,${mid.toFixed(1)} L${width},${mid.toFixed(1)}`
 
   return (
     <svg className={`ekg-line ${alive ? '' : 'flat'}`} viewBox={`0 0 ${width} ${height}`} preserveAspectRatio="none">
-      <path d={d} />
+      <path className="ekg-base" d={baseline} />
+      <path className="ekg-trace" d={d} />
     </svg>
   )
 }

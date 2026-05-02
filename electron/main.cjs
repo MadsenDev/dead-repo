@@ -1,4 +1,5 @@
 const { app, BrowserWindow, ipcMain, Menu, shell } = require('electron')
+const fs = require('fs')
 const path = require('path')
 
 const isDev = process.env.NODE_ENV === 'development'
@@ -6,6 +7,8 @@ const isDev = process.env.NODE_ENV === 'development'
 Menu.setApplicationMenu(null)
 
 let mainWindow = null
+
+loadLocalEnv()
 
 function createWindow() {
   mainWindow = new BrowserWindow({
@@ -60,3 +63,34 @@ app.on('window-all-closed', () => {
 app.on('activate', () => {
   if (BrowserWindow.getAllWindows().length === 0) createWindow()
 })
+
+function loadLocalEnv() {
+  const envFiles = ['.env.local', '.env']
+
+  for (const filename of envFiles) {
+    const filePath = path.join(process.cwd(), filename)
+    if (!fs.existsSync(filePath)) continue
+
+    const content = fs.readFileSync(filePath, 'utf8')
+    for (const line of content.split(/\r?\n/)) {
+      const trimmed = line.trim()
+      if (!trimmed || trimmed.startsWith('#')) continue
+
+      const eqIndex = trimmed.indexOf('=')
+      if (eqIndex === -1) continue
+
+      const key = trimmed.slice(0, eqIndex).trim()
+      let value = trimmed.slice(eqIndex + 1).trim()
+      if (!key || process.env[key] != null) continue
+
+      if (
+        (value.startsWith('"') && value.endsWith('"')) ||
+        (value.startsWith("'") && value.endsWith("'"))
+      ) {
+        value = value.slice(1, -1)
+      }
+
+      process.env[key] = value
+    }
+  }
+}

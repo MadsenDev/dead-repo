@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import { EkgLine } from '../components/shared'
-import { getUser, getUserRepos } from '../lib/github'
+import { getRepoInsights, getUser, getUserRepos } from '../lib/github'
 import { mapGitHubRepo } from '../lib/classify'
 
 export function OnboardingFlow({ voice, onComplete }) {
@@ -39,7 +39,7 @@ function WelcomeScreen({ onNext }) {
       </div>
       <div style={{ fontFamily: 'var(--mono)', fontSize: 10, letterSpacing: '0.20em',
                     color: 'var(--vital)', textTransform: 'uppercase', marginBottom: 16 }}>
-        Dead Repo · v2.4.1
+        Dead Repo · v0.1.0
       </div>
       <h1 style={{ fontSize: 38, fontWeight: 300, letterSpacing: '-0.02em', margin: '0 0 16px',
                    color: 'var(--fg-0)' }}>
@@ -220,7 +220,8 @@ function ScanningScreen({ token, onDone }) {
         for (let i = 0; i < rawRepos.length; i++) {
           if (cancelled) return
           const r = rawRepos[i]
-          const mapped_r = mapGitHubRepo(r)
+          const insights = await getRepoInsights(token, r.owner.login, r.name)
+          const mapped_r = mapGitHubRepo(r, insights)
           mapped.push(mapped_r)
 
           const pad = Math.max(0, 40 - r.name.length)

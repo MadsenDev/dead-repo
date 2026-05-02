@@ -8,7 +8,7 @@ import { SettingsPage } from './pages/settings'
 import { OnboardingFlow } from './pages/onboarding'
 import { CertificateModal } from './pages/certificate'
 import { WrappedFlow } from './pages/wrapped'
-import { getUser, getUserRepos } from './lib/github'
+import { enrichRepos, getUser, getUserRepos } from './lib/github'
 import { mapGitHubRepo, reclassifyMappedRepo } from './lib/classify'
 
 const ACCENT_MAP = {
@@ -77,7 +77,9 @@ export default function App() {
           setGithubUser(user)
           localStorage.setItem('github_user', JSON.stringify(user))
         }
-        setLiveRepos((rawRepos || []).map(r => mapGitHubRepo(r, null, null, thresholds)))
+        const enriched = await enrichRepos(githubToken, rawRepos || [])
+        if (cancelled) return
+        setLiveRepos(enriched.map(({ repo, insights }) => mapGitHubRepo(repo, insights, thresholds)))
       } catch {
         // token likely expired — clear it and show onboarding
         if (!cancelled) {
@@ -204,7 +206,7 @@ export default function App() {
           <div className="titlebar-light g" onClick={() => window.electronAPI?.maximize()} title="Maximize" />
         </div>
         <div className="titlebar-title">
-          {voiceKey === 'supportive' ? 'our little repo garden 💕' : 'DEAD REPO · v2.4.1'}
+          {voiceKey === 'supportive' ? 'our little repo garden 💕' : 'DEAD REPO · v0.1.0'}
         </div>
         <div className="titlebar-meta" style={{ WebkitAppRegion: 'no-drag' }}>
           <span className="dot" style={{ background: isLive ? 'var(--vital)' : 'var(--fg-3)', boxShadow: isLive ? '0 0 6px var(--vital-glow)' : 'none', animation: isLive ? 'pulse-dot 2.5s ease-in-out infinite' : 'none' }} />

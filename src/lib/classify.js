@@ -212,10 +212,14 @@ export function reclassifyMappedRepo(repo, thresholds) {
   }
 }
 
-export function mapGitHubRepo(ghRepo, commitActivity = null, lastCommit = null, thresholds) {
+export function mapGitHubRepo(ghRepo, insights = {}, thresholds) {
+  const commitActivity = insights.commitActivity ?? null
+  const lastCommit = insights.lastCommit ?? null
   const state = classifyState(ghRepo, thresholds)
   const isDead = state === 'dead' || state === 'flatlined'
   const causes = isDead ? diagnoseCause(ghRepo, commitActivity) : null
+  const prs = insights.prs ?? null
+  const issues = prs == null ? ghRepo.open_issues_count : Math.max(0, ghRepo.open_issues_count - prs)
 
   return {
     id: `gh-${ghRepo.id}`,
@@ -228,15 +232,15 @@ export function mapGitHubRepo(ghRepo, commitActivity = null, lastCommit = null, 
     langColor: LANG_COLORS[ghRepo.language] || '#666666',
     stars: ghRepo.stargazers_count,
     forks: ghRepo.forks_count,
-    issues: ghRepo.open_issues_count,
-    prs: null,
+    issues,
+    prs,
     lifespan: computeLifespan(ghRepo.created_at, ghRepo.pushed_at),
     firstCommit: ghRepo.created_at.slice(0, 10),
     lastCommit: ghRepo.pushed_at.slice(0, 10),
     commitsTotal: Array.isArray(commitActivity) ? commitActivity.reduce((sum, week) => sum + (week.total || 0), 0) : null,
     commitsLast30: Array.isArray(commitActivity) ? commitActivity.slice(-4).reduce((sum, week) => sum + (week.total || 0), 0) : null,
-    contributors: null,
-    branches: null,
+    contributors: insights.contributors ?? null,
+    branches: insights.branches ?? null,
     description: ghRepo.description || '',
     sparkline: generateSparkline(commitActivity, state),
     causes,

@@ -1,6 +1,6 @@
 {
   "name": "dead-repo",
-  "version": "2.4.1",
+  "version": "0.1.0",
   "description": "Autopsy your abandoned GitHub repositories",
   "main": "electron/main.cjs",
   "type": "module",

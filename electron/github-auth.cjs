@@ -108,7 +108,7 @@ function exchangeCode(code) {
         'Content-Type': 'application/json',
         'Accept': 'application/json',
         'Content-Length': Buffer.byteLength(body),
-        'User-Agent': 'DeadRepo/2.4.1',
+        'User-Agent': 'DeadRepo/0.1.0',
       },
     }, (res) => {
       let data = ''

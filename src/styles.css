@@ -235,14 +235,28 @@ button { font-family: inherit; }
 }
 
 /* ──────────── EKG line ──────────── */
-.ekg-line { width: 100%; height: 100%; display: block; }
-.ekg-line path {
+.ekg-line { width: 100%; height: 100%; display: block; overflow: visible; }
+.ekg-line .ekg-base {
+  fill: none;
+  stroke: color-mix(in oklab, var(--vital) 16%, transparent);
+  stroke-width: 0.9;
+  opacity: 0.55;
+}
+.ekg-line .ekg-trace {
   fill: none;
   stroke: var(--vital);
-  stroke-width: 1.2;
-  filter: drop-shadow(0 0 3px var(--vital-glow));
+  stroke-width: 1.6;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  filter: drop-shadow(0 0 2px var(--vital-glow)) drop-shadow(0 0 7px var(--vital-glow));
 }
-.ekg-line.flat path { stroke: var(--crit); filter: drop-shadow(0 0 3px oklch(0.65 0.20 25 / 0.4)); }
+.ekg-line.flat .ekg-base {
+  stroke: color-mix(in oklab, var(--crit) 16%, transparent);
+}
+.ekg-line.flat .ekg-trace {
+  stroke: var(--crit);
+  filter: drop-shadow(0 0 2px oklch(0.65 0.20 25 / 0.35)) drop-shadow(0 0 7px oklch(0.65 0.20 25 / 0.3));
+}
 
 /* ──────────── Status pills ──────────── */
 .pill {
