@@ -1,5 +1,11 @@
 const MS_DAY = 86400000
 
+const DEFAULT_THRESHOLDS = {
+  aliveDays: 30,
+  fadingDays: 90,
+  deadDays: 365,
+}
+
 export const LANG_COLORS = {
   JavaScript: '#f1e05a', TypeScript: '#3178c6', Python: '#3572A5',
   Rust: '#dea584', Go: '#00add8', Ruby: '#701516', Java: '#b07219',
@@ -14,20 +20,43 @@ function daysSince(dateStr) {
   return (Date.now() - new Date(dateStr).getTime()) / MS_DAY
 }
 
-export function classifyState(ghRepo) {
-  if (ghRepo.archived) return 'dead'
-  const days = daysSince(ghRepo.pushed_at)
-  if (days <= 30) return 'alive'
-  if (days <= 90) return 'fading'
-  if (days <= 365) return 'flatlined'
+function normalizeThresholds(thresholds = {}) {
+  return {
+    aliveDays: thresholds.aliveDays ?? DEFAULT_THRESHOLDS.aliveDays,
+    fadingDays: thresholds.fadingDays ?? DEFAULT_THRESHOLDS.fadingDays,
+    deadDays: thresholds.deadDays ?? DEFAULT_THRESHOLDS.deadDays,
+  }
+}
+
+function getRepoActivitySource(repo) {
+  return {
+    archived: Boolean(repo.archived ?? repo.sourceArchived),
+    pushedAt: repo.pushed_at || repo.sourcePushedAt || repo.lastCommit,
+  }
+}
+
+export function classifyState(repo, thresholds) {
+  const { archived, pushedAt } = getRepoActivitySource(repo)
+  const limits = normalizeThresholds(thresholds)
+  if (archived) return 'dead'
+  const days = daysSince(pushedAt)
+  if (days <= limits.aliveDays) return 'alive'
+  if (days <= limits.fadingDays) return 'fading'
+  if (days <= limits.deadDays) return 'flatlined'
   return 'dead'
 }
 
-export function computeVitals(ghRepo, state) {
+export function computeVitals(repo, state, thresholds) {
   if (state === 'dead' || state === 'flatlined') return 0
-  const days = daysSince(ghRepo.pushed_at)
+  const { pushedAt } = getRepoActivitySource(repo)
+  const limits = normalizeThresholds(thresholds)
+  const days = daysSince(pushedAt)
   if (state === 'alive') return Math.max(40, Math.round(100 - days * 2))
-  if (state === 'fading') return Math.round(Math.max(5, 38 - (days - 30) * 0.35))
+  if (state === 'fading') {
+    const fadingSpan = Math.max(1, limits.fadingDays - limits.aliveDays)
+    const decay = ((days - limits.aliveDays) / fadingSpan) * 33
+    return Math.round(Math.max(5, 38 - decay))
+  }
   return 0
 }
 
@@ -172,8 +201,19 @@ export function diagnoseCause(ghRepo, commitActivity) {
   return top.map(c => ({ ...c, confidence: Math.round(c.confidence * 100) }))
 }
 
-export function mapGitHubRepo(ghRepo, commitActivity = null, lastCommit = null) {
-  const state = classifyState(ghRepo)
+export function reclassifyMappedRepo(repo, thresholds) {
+  const state = classifyState(repo, thresholds)
+  return {
+    ...repo,
+    state,
+    vitals: computeVitals(repo, state, thresholds),
+    timeOfDeath: state === 'dead' || state === 'flatlined' ? repo.lastCommit : null,
+    declared: repo.sourceArchived ? repo.declared : state === 'dead' ? repo.declared : null,
+  }
+}
+
+export function mapGitHubRepo(ghRepo, commitActivity = null, lastCommit = null, thresholds) {
+  const state = classifyState(ghRepo, thresholds)
   const isDead = state === 'dead' || state === 'flatlined'
   const causes = isDead ? diagnoseCause(ghRepo, commitActivity) : null
 
@@ -181,21 +221,22 @@ export function mapGitHubRepo(ghRepo, commitActivity = null, lastCommit = null) 
     id: `gh-${ghRepo.id}`,
     name: ghRepo.name,
     owner: ghRepo.owner.login,
+    url: ghRepo.html_url,
     state,
-    vitals: computeVitals(ghRepo, state),
+    vitals: computeVitals(ghRepo, state, thresholds),
     lang: ghRepo.language || 'Unknown',
     langColor: LANG_COLORS[ghRepo.language] || '#666666',
     stars: ghRepo.stargazers_count,
     forks: ghRepo.forks_count,
     issues: ghRepo.open_issues_count,
-    prs: 0,
+    prs: null,
     lifespan: computeLifespan(ghRepo.created_at, ghRepo.pushed_at),
     firstCommit: ghRepo.created_at.slice(0, 10),
     lastCommit: ghRepo.pushed_at.slice(0, 10),
-    commitsTotal: 0,
-    commitsLast30: 0,
-    contributors: 1,
-    branches: 1,
+    commitsTotal: Array.isArray(commitActivity) ? commitActivity.reduce((sum, week) => sum + (week.total || 0), 0) : null,
+    commitsLast30: Array.isArray(commitActivity) ? commitActivity.slice(-4).reduce((sum, week) => sum + (week.total || 0), 0) : null,
+    contributors: null,
+    branches: null,
     description: ghRepo.description || '',
     sparkline: generateSparkline(commitActivity, state),
     causes,
@@ -204,9 +245,12 @@ export function mapGitHubRepo(ghRepo, commitActivity = null, lastCommit = null) 
     timeOfDeath: isDead ? ghRepo.pushed_at.slice(0, 10) : null,
     declared: ghRepo.archived ? ghRepo.updated_at.slice(0, 10) : null,
     lastWords: lastCommit?.commit?.message?.split('\n')[0] ?? null,
-    deps: 0,
-    depsOutdated: 0,
+    deps: null,
+    depsOutdated: null,
     license: ghRepo.license?.spdx_id || 'none',
     survivedBy: ghRepo.forks_count > 0 ? [`${ghRepo.forks_count} fork(s) on GitHub`] : [],
+    sourceArchived: ghRepo.archived,
+    sourceCreatedAt: ghRepo.created_at,
+    sourcePushedAt: ghRepo.pushed_at,
   }
 }

@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import { EkgLine } from '../components/shared'
-import { getUser, getUserRepos, getLastCommit } from '../lib/github'
+import { getUser, getUserRepos } from '../lib/github'
 import { mapGitHubRepo } from '../lib/classify'
 
 export function OnboardingFlow({ voice, onComplete }) {
@@ -98,8 +98,7 @@ function ConnectScreen({ onConnect, onSkip }) {
         Connect your GitHub.
       </h2>
       <p style={{ fontSize: 13, color: 'var(--fg-2)', lineHeight: 1.6, margin: '0 0 28px' }}>
-        Read-only access to repository metadata, commits, issues, and pull requests.
-        We do not read your code.
+        Read-only access to repository metadata and activity signals. Authentication must be configured by the desktop app environment.
       </p>
 
       <div className="panel" style={{ padding: 20, marginBottom: 20 }}>

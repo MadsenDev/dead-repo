@@ -38,11 +38,13 @@ npm install
 
 ### Configure
 
-Set your GitHub OAuth credentials in `electron/github-auth.cjs`:
+Set your GitHub OAuth credentials in the environment before starting the app:
 
-```js
-const CLIENT_ID = 'your_client_id'
-const CLIENT_SECRET = 'your_client_secret'
+```bash
+export GITHUB_CLIENT_ID=your_client_id
+export GITHUB_CLIENT_SECRET=your_client_secret
+# optional if you need a non-default callback
+export GITHUB_REDIRECT_URI=http://localhost:3000/callback
 ```
 
 ### Run

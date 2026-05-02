@@ -36,16 +36,17 @@ export function AutopsyPage({ voice, repo, onBack, onAction }) {
         {isDead && (
           <button className="btn primary" onClick={() => onAction('reanimate', repo.id)}>{voice.reanimate}</button>
         )}
-        <button className="btn">{voice.archive}</button>
         {isDead && (
           <button className="btn" onClick={() => onAction('certificate', repo.id)}>⎙ Death certificate</button>
         )}
-        <button className="btn ghost">View on GitHub ↗</button>
+        {repo.url && (
+          <button className="btn ghost" onClick={() => openRepoUrl(repo.url)}>View on GitHub ↗</button>
+        )}
         <div style={{ marginLeft: 'auto', display: 'flex', gap: 16, fontFamily: 'var(--mono)', fontSize: 10, color: 'var(--fg-3)', alignItems: 'center' }}>
           <span>★ {repo.stars}</span>
           <span>⑂ {repo.forks}</span>
           <span>◯ {repo.issues} issues</span>
-          <span>⇄ {repo.prs} PRs</span>
+          <span>⇄ {formatMetric(repo.prs)} PRs</span>
           <span>{repo.license}</span>
         </div>
       </div>
@@ -59,7 +60,7 @@ export function AutopsyPage({ voice, repo, onBack, onAction }) {
 
             <div>
               <h2>{voice.lastWords}</h2>
-              <div className="last-words">{repo.lastWords}</div>
+              <div className="last-words">{repo.lastWords || 'No commit message available.'}</div>
               <div style={{ fontFamily: 'var(--mono)', fontSize: 10, color: 'var(--fg-3)', marginTop: 8 }}>
                 committed {formatDate(repo.lastCommit)} · {relTime(repo.lastCommit)}
               </div>
@@ -119,21 +120,22 @@ export function AutopsyPage({ voice, repo, onBack, onAction }) {
                 {repo.revivedAt && (
                   <div className="field"><span className="k">Revived</span><span className="v" style={{ color: 'var(--revive)' }}>{formatDate(repo.revivedAt)}</span></div>
                 )}
-                <div className="field"><span className="k">Total commits</span><span className="v">{repo.commitsTotal}</span></div>
-                <div className="field"><span className="k">Contributors</span><span className="v">{repo.contributors}</span></div>
-                <div className="field" style={{ borderBottom: 'none' }}><span className="k">Branches</span><span className="v">{repo.branches}</span></div>
+                <div className="field"><span className="k">Total commits</span><span className="v">{formatMetric(repo.commitsTotal)}</span></div>
+                <div className="field"><span className="k">Contributors</span><span className="v">{formatMetric(repo.contributors)}</span></div>
+                <div className="field" style={{ borderBottom: 'none' }}><span className="k">Branches</span><span className="v">{formatMetric(repo.branches)}</span></div>
               </div>
             </div>
 
             <div className="panel">
               <div className="panel-hd">
                 <span>{voice.toxicology}</span>
-                <span className="index">{repo.deps} total · {repo.depsOutdated} outdated</span>
+                <span className="index">{repo.deps == null || repo.depsOutdated == null ? 'unavailable for live sync' : `${repo.deps} total · ${repo.depsOutdated} outdated`}</span>
               </div>
               <div style={{ padding: '14px 18px' }}>
                 <DepsBar total={repo.deps} outdated={repo.depsOutdated} />
                 <div style={{ fontFamily: 'var(--mono)', fontSize: 10, color: 'var(--fg-3)', marginTop: 10, lineHeight: 1.6 }}>
-                  {repo.depsOutdated > 20 ? 'Toxicology suggests significant rot.' :
+                  {repo.deps == null || repo.depsOutdated == null ? 'Dependency data is not collected from the GitHub API in the live view.' :
+                   repo.depsOutdated > 20 ? 'Toxicology suggests significant rot.' :
                    repo.depsOutdated > 5 ? 'Mild dependency degradation detected.' :
                    repo.depsOutdated > 0 ? 'Minor outdated packages. Survivable.' :
                    'Dependencies clean. Cause of death likely behavioral.'}
@@ -167,17 +169,21 @@ export function AutopsyPage({ voice, repo, onBack, onAction }) {
 function CommitTimeline({ repo }) {
   const start = new Date(repo.firstCommit)
   const end = new Date(repo.lastCommit)
-  const now = new Date('2026-04-30')
+  const now = new Date()
   const totalMonths = Math.max(1, Math.round((now - start) / (1000 * 60 * 60 * 24 * 30)))
   const livingMonths = Math.max(1, Math.round((end - start) / (1000 * 60 * 60 * 24 * 30)))
+  const activity = Array.isArray(repo.sparkline) && repo.sparkline.length > 0 ? repo.sparkline : []
 
   const months = []
   for (let i = 0; i < totalMonths; i++) {
-    if (i >= livingMonths + 1) {
+    if (activity.length > 0 && i < activity.length) {
+      months.push(activity[i])
+    } else if (i >= livingMonths + 1) {
       months.push(0)
     } else {
       const phase = i / Math.max(1, livingMonths)
-      const peak = Math.max(2, Math.round((repo.commitsTotal / livingMonths) * (1 - Math.pow(phase, 1.4)) * 1.6))
+      const baseline = repo.commitsTotal != null ? repo.commitsTotal / livingMonths : 3
+      const peak = Math.max(2, Math.round(baseline * (1 - Math.pow(phase, 1.4)) * 1.6))
       const jitter = Math.round(Math.sin(i * 1.7) * 3 + Math.cos(i * 0.9) * 2)
       months.push(Math.max(0, peak + jitter))
     }
@@ -208,14 +214,22 @@ function CommitTimeline({ repo }) {
       <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 12,
                     fontFamily: 'var(--mono)', fontSize: 9, color: 'var(--fg-3)', letterSpacing: '0.04em' }}>
         <span>{formatDate(repo.firstCommit)}</span>
-        <span>{repo.commitsTotal} commits · {months.length} months observed</span>
-        <span>{formatDate('2026-04-30')}</span>
+        <span>{repo.commitsTotal == null ? `${months.length} months observed` : `${repo.commitsTotal} commits · ${months.length} months observed`}</span>
+        <span>{formatDate(now)}</span>
       </div>
     </div>
   )
 }
 
 function DepsBar({ total, outdated }) {
+  if (total == null || outdated == null) {
+    return (
+      <div style={{ fontFamily: 'var(--mono)', fontSize: 10, color: 'var(--fg-3)' }}>
+        No dependency inventory available.
+      </div>
+    )
+  }
+
   const segments = []
   for (let i = 0; i < total; i++) {
     segments.push(
@@ -234,6 +248,18 @@ function DepsBar({ total, outdated }) {
       </div>
     </div>
   )
+}
+
+function formatMetric(value) {
+  return value == null ? '—' : value
+}
+
+function openRepoUrl(url) {
+  if (window.electronAPI?.openExternal) {
+    window.electronAPI.openExternal(url)
+    return
+  }
+  window.open(url, '_blank', 'noopener,noreferrer')
 }
 
 function DifferentialDiagnosis({ repo, voice }) {

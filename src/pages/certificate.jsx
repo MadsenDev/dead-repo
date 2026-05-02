@@ -64,7 +64,6 @@ export function CertificateModal({ repo, voice, onClose }) {
             <button className="btn" onClick={handleExport} disabled={exporting}>
               {exporting ? 'Exporting…' : '↓ Save PNG'}
             </button>
-            <button className="btn">↗ Share</button>
             <button className="btn ghost" onClick={onClose}>✕ Close</button>
           </div>
         </div>
@@ -121,8 +120,8 @@ export function CertificateModal({ repo, voice, onClose }) {
             <CertField label="Date of birth" value={formatDate(repo.firstCommit)} />
             <CertField label="Date of expiry" value={formatDate(repo.timeOfDeath || repo.lastCommit)} highlight />
             <CertField label="Lifespan" value={repo.lifespan} />
-            <CertField label="Total commits" value={repo.commitsTotal.toLocaleString()} />
-            <CertField label="Contributors at TOD" value={repo.contributors} />
+            <CertField label="Total commits" value={formatMetric(repo.commitsTotal)} />
+            <CertField label="Contributors at TOD" value={formatMetric(repo.contributors)} />
             <CertField label="Final language" value={repo.lang} />
             <CertField label="Stars accrued" value={repo.stars} />
             <CertField label="License" value={repo.license} last />
@@ -153,7 +152,7 @@ export function CertificateModal({ repo, voice, onClose }) {
             <div style={{ fontFamily: 'var(--mono)', fontSize: 13, color: 'var(--fg-0)',
                           padding: '12px 16px', background: 'rgba(0,0,0,0.4)',
                           borderLeft: '1px solid rgba(255,255,255,0.14)' }}>
-              {repo.lastWords}
+              {repo.lastWords || 'No commit message available.'}
             </div>
           </div>
 
@@ -230,6 +229,10 @@ export function CertificateModal({ repo, voice, onClose }) {
       </div>
     </div>
   )
+}
+
+function formatMetric(value) {
+  return value == null ? 'Unavailable' : value.toLocaleString?.() ?? String(value)
 }
 
 function CertField({ label, value, highlight, last }) {

@@ -3,7 +3,8 @@ import { EkgLine } from '../components/shared'
 import { VOICES } from '../data/voices'
 
 export function SettingsPage({ voice, voiceKey, onPickVoice, accent, onAccent, density, onDensity,
-                               githubUser, isLive, syncing, onDisconnect, onConnect, onResync }) {
+                               githubUser, isLive, syncing, onDisconnect, onConnect, onResync,
+                               thresholds, onThresholdsChange }) {
   const personas = [
     { key: 'neutral', voice: VOICES.neutral },
     { key: 'monday', voice: VOICES.monday },
@@ -155,9 +156,9 @@ export function SettingsPage({ voice, voiceKey, onPickVoice, accent, onAccent, d
         </div>
 
         <div className="panel" style={{ padding: '6px 0' }}>
-          <SettingRow label="Fading" hint="Days without commits before flagged at-risk."><ThresholdInput value={30} unit="d" /></SettingRow>
-          <SettingRow label="Flatlined" hint="Days without commits before flatline declared."><ThresholdInput value={90} unit="d" /></SettingRow>
-          <SettingRow label="Declared dead" hint="Days flatlined before automatic declaration."><ThresholdInput value={365} unit="d" /></SettingRow>
+          <SettingRow label="Fading" hint="Days without commits before flagged at-risk."><ThresholdInput value={thresholds.aliveDays} unit="d" min={1} onChange={(value) => onThresholdsChange({ aliveDays: value })} /></SettingRow>
+          <SettingRow label="Flatlined" hint="Days without commits before flatline declared."><ThresholdInput value={thresholds.fadingDays} unit="d" min={thresholds.aliveDays + 1} onChange={(value) => onThresholdsChange({ fadingDays: value })} /></SettingRow>
+          <SettingRow label="Declared dead" hint="Days flatlined before automatic declaration."><ThresholdInput value={thresholds.deadDays} unit="d" min={thresholds.fadingDays + 1} onChange={(value) => onThresholdsChange({ deadDays: value })} /></SettingRow>
         </div>
       </div>
     </>
@@ -177,17 +178,17 @@ function SettingRow({ label, hint, children }) {
   )
 }
 
-function ThresholdInput({ value: init, unit }) {
-  const [v, setV] = useState(init)
+function ThresholdInput({ value, unit, min = 1, onChange }) {
+  const adjust = (next) => onChange(Math.max(min, Number(next) || min))
   return (
     <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontFamily: 'var(--mono)' }}>
-      <button className="btn ghost" onClick={() => setV(Math.max(1, v - 1))} style={{ width: 26, padding: 0 }}>−</button>
-      <input type="number" value={v} onChange={e => setV(Number(e.target.value))}
+      <button className="btn ghost" onClick={() => adjust(value - 1)} style={{ width: 26, padding: 0 }}>−</button>
+      <input type="number" value={value} min={min} onChange={e => adjust(e.target.value)}
              style={{ width: 60, height: 28, background: 'var(--bg-2)', border: '1px solid var(--line)',
                       borderRadius: 3, color: 'var(--fg-0)', textAlign: 'center', fontFamily: 'var(--mono)',
                       fontSize: 12, outline: 'none' }} />
       <span style={{ color: 'var(--fg-3)', fontSize: 11 }}>{unit}</span>
-      <button className="btn ghost" onClick={() => setV(v + 1)} style={{ width: 26, padding: 0 }}>+</button>
+      <button className="btn ghost" onClick={() => adjust(value + 1)} style={{ width: 26, padding: 0 }}>+</button>
     </div>
   )
 }

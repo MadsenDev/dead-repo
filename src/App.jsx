@@ -9,7 +9,7 @@ import { OnboardingFlow } from './pages/onboarding'
 import { CertificateModal } from './pages/certificate'
 import { WrappedFlow } from './pages/wrapped'
 import { getUser, getUserRepos } from './lib/github'
-import { mapGitHubRepo } from './lib/classify'
+import { mapGitHubRepo, reclassifyMappedRepo } from './lib/classify'
 
 const ACCENT_MAP = {
   phosphor: { vital: 'oklch(0.78 0.16 152)', glow: 'oklch(0.78 0.16 152 / 0.45)', faint: 'oklch(0.78 0.16 152 / 0.18)', dim: 'oklch(0.55 0.14 152)' },
@@ -22,6 +22,20 @@ function getStoredToken() {
   try { return localStorage.getItem('github_token') } catch { return null }
 }
 
+function getStoredThresholds() {
+  try {
+    const parsed = JSON.parse(localStorage.getItem('triage_thresholds') || 'null')
+    if (!parsed) return { aliveDays: 30, fadingDays: 90, deadDays: 365 }
+    return {
+      aliveDays: parsed.aliveDays ?? 30,
+      fadingDays: parsed.fadingDays ?? 90,
+      deadDays: parsed.deadDays ?? 365,
+    }
+  } catch {
+    return { aliveDays: 30, fadingDays: 90, deadDays: 365 }
+  }
+}
+
 export default function App() {
   const [voiceKey, setVoiceKey] = useState('monday')
   const [accentKey, setAccentKey] = useState('phosphor')
@@ -31,6 +45,7 @@ export default function App() {
   const [actionLog, setActionLog] = useState([])
   const [certRepoId, setCertRepoId] = useState(null)
   const [showWrapped, setShowWrapped] = useState(false)
+  const [thresholds, setThresholds] = useState(getStoredThresholds)
 
   // GitHub state
   const [githubToken, setGithubToken] = useState(getStoredToken)
@@ -62,9 +77,7 @@ export default function App() {
           setGithubUser(user)
           localStorage.setItem('github_user', JSON.stringify(user))
         }
-        if (rawRepos?.length) {
-          setLiveRepos(rawRepos.map(r => mapGitHubRepo(r)))
-        }
+        setLiveRepos((rawRepos || []).map(r => mapGitHubRepo(r, null, null, thresholds)))
       } catch {
         // token likely expired — clear it and show onboarding
         if (!cancelled) {
@@ -106,7 +119,10 @@ export default function App() {
   }, [density])
 
   // Base repos: live data if available, else mock
-  const baseRepos = liveRepos || REPOS
+  const baseRepos = useMemo(() => {
+    if (!liveRepos) return REPOS
+    return liveRepos.map(repo => reclassifyMappedRepo(repo, thresholds))
+  }, [liveRepos, thresholds])
 
   const repos = useMemo(() => {
     return baseRepos.map(r => {
@@ -141,7 +157,7 @@ export default function App() {
     } else {
       localStorage.setItem('github_dismissed', '1')
     }
-    if (repos?.length) setLiveRepos(repos)
+    if (repos) setLiveRepos(repos)
     setShowOnboarding(false)
     setPage('dashboard')
   }
@@ -159,6 +175,19 @@ export default function App() {
   const handleResync = () => {
     if (!githubToken || syncing) return
     setSyncTick(t => t + 1)
+  }
+
+  const handleThresholdsChange = (partial) => {
+    setThresholds(prev => {
+      const next = { ...prev, ...partial }
+      const normalized = {
+        aliveDays: Math.max(1, next.aliveDays),
+        fadingDays: Math.max(next.aliveDays + 1, next.fadingDays),
+        deadDays: Math.max(next.fadingDays + 1, next.deadDays),
+      }
+      localStorage.setItem('triage_thresholds', JSON.stringify(normalized))
+      return normalized
+    })
   }
 
   const openRepo = repos.find(r => r.id === openRepoId)
@@ -236,6 +265,7 @@ export default function App() {
                           onPickVoice={setVoiceKey}
                           accent={accentKey} onAccent={setAccentKey}
                           density={density} onDensity={setDensity}
+                          thresholds={thresholds} onThresholdsChange={handleThresholdsChange}
                           githubUser={githubUser} isLive={isLive} syncing={syncing}
                           onDisconnect={handleDisconnect}
                           onConnect={() => setShowOnboarding(true)}

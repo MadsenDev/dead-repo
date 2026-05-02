@@ -31,7 +31,7 @@ export function ListPage({ voice, page, repos, onOpenRepo }) {
     if (sort === 'last') return new Date(b.lastCommit) - new Date(a.lastCommit)
     if (sort === 'vitals') return b.vitals - a.vitals
     if (sort === 'name') return a.name.localeCompare(b.name)
-    if (sort === 'lifespan') return b.commitsTotal - a.commitsTotal
+    if (sort === 'lifespan') return (new Date(b.lastCommit) - new Date(b.firstCommit)) - (new Date(a.lastCommit) - new Date(a.firstCommit))
     return 0
   })
 

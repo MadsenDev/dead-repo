@@ -125,7 +125,7 @@ export function RepoTable({ repos, voice, onOpen }) {
 // Helpers
 // ─────────────────────────────────────────────────────
 export function relTime(dateStr) {
-  const now = new Date('2026-04-30')
+  const now = new Date()
   const d = new Date(dateStr)
   const diffDays = Math.floor((now - d) / (1000 * 60 * 60 * 24))
   if (diffDays < 1) return 'today'

@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, Menu } = require('electron')
+const { app, BrowserWindow, ipcMain, Menu, shell } = require('electron')
 const path = require('path')
 
 const isDev = process.env.NODE_ENV === 'development'
@@ -33,6 +33,12 @@ function createWindow() {
 ipcMain.on('win:minimize', () => mainWindow?.minimize())
 ipcMain.on('win:maximize', () => mainWindow?.isMaximized() ? mainWindow.unmaximize() : mainWindow.maximize())
 ipcMain.on('win:close', () => mainWindow?.close())
+ipcMain.handle('shell:open-external', async (_event, url) => {
+  if (typeof url !== 'string' || !/^https?:\/\//.test(url)) {
+    throw new Error('Invalid external URL')
+  }
+  await shell.openExternal(url)
+})
 
 // GitHub OAuth — token exchange happens here so client_secret never reaches renderer
 ipcMain.handle('github:start-auth', async () => {

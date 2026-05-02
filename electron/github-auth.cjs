@@ -5,7 +5,7 @@ const { URL } = require('url')
 
 const CLIENT_ID = process.env.GITHUB_CLIENT_ID
 const CLIENT_SECRET = process.env.GITHUB_CLIENT_SECRET
-const REDIRECT_URI = 'http://localhost:3000/callback'
+const REDIRECT_URI = process.env.GITHUB_REDIRECT_URI || 'http://localhost:3000/callback'
 const SCOPES = 'repo read:user read:org'
 const TIMEOUT_MS = 5 * 60 * 1000
 
@@ -13,6 +13,11 @@ let authServer = null
 
 function startOAuth() {
   return new Promise((resolve, reject) => {
+    if (!CLIENT_ID || !CLIENT_SECRET) {
+      reject(new Error('GitHub OAuth is not configured. Set GITHUB_CLIENT_ID and GITHUB_CLIENT_SECRET.'))
+      return
+    }
+
     if (authServer) {
       authServer.close()
       authServer = null
@@ -27,7 +32,7 @@ function startOAuth() {
     }
 
     authServer = http.createServer((req, res) => {
-      const url = new URL(req.url, 'http://localhost:3000')
+      const url = new URL(req.url, REDIRECT_URI)
       if (url.pathname !== '/callback') { res.writeHead(404); res.end(); return }
 
       const code = url.searchParams.get('code')
@@ -56,7 +61,9 @@ function startOAuth() {
       reject(new Error(`OAuth server failed to start: ${err.message}`))
     })
 
-    authServer.listen(3000, () => {
+    const redirectUrl = new URL(REDIRECT_URI)
+
+    authServer.listen(Number(redirectUrl.port || 80), redirectUrl.hostname, () => {
       // Timeout if user doesn't complete auth
       timer = setTimeout(() => {
         cleanup()
@@ -69,7 +76,10 @@ function startOAuth() {
         scope: SCOPES,
         state,
       })
-      shell.openExternal(`https://github.com/login/oauth/authorize?${params}`)
+      shell.openExternal(`https://github.com/login/oauth/authorize?${params}`).catch((error) => {
+        cleanup()
+        reject(error)
+      })
     })
   })
 }
