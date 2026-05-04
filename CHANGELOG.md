@@ -4,6 +4,18 @@
 
 ### Added
 
+- Super Supportive voice now takes over the app: 12 floating hearts drifting up from the bottom at all times, a fixed banner below the titlebar with rotating clingy messages (context-aware for graveyard/morgue pages and open repos), nav items lean in on hover, alive stat cards glow pink, and all copy pushed to full unhinged territory.
+- Added three new voice personalities: Therapist ("How does that make you feel?"), Deeply Moved ("I just need a moment. (sobbing)"), and Victorian ("Here lies another unfinished dream.") — each with full copy across all UI sections and a distinct death certificate.
+- Deeply Moved (weepy) voice takes over the app: 12 falling teardrops drifting down from the top, a fixed banner with rotating sobbing messages (context-aware for graveyard/morgue/open repo), blue watery color accent, and fully emotional copy throughout.
+- All display preferences (voice, accent, density, theme, default page, scan limit, columns, date format) now persist to localStorage across sessions.
+- Light theme — flips all bg/fg variables, titlebar gradient, and EKG base color; toggled via Settings → Appearance.
+- Default landing page — choose which page opens on app load (dashboard, ward, hospital, morgue, graveyard).
+- Scan limit — cap GitHub repo fetch at 100, 250, or 500 per sync.
+- Table column visibility — toggle status, vitals, activity, last commit, lifespan, and stars columns on/off.
+- Date format — repo table "last commit" column shows relative, absolute, or both formats.
+- Density setting now functional — `dense` tightens padding/font sizes across tables, panels, nav, and stat cards; `sparse` opens them up.
+- Added Print button to death certificate modal — renders on white paper via `@media print` with full light-theme override.
+- Death certificate now fully adapts to the active voice/tone — title, section labels, stamp, footer, and caption all vary per personality.
 - Added repo-local guidance in `AGENTS.md` and `CLAUDE.md` to keep this changelog updated.
 - Added repo-local guidance to track major follow-up work in `TODO.md`.
 - Added `.env.example` for local GitHub client configuration in web development.
@@ -11,6 +23,10 @@
 - Added local scan-result caching with last-scan timestamps so connected sessions can hydrate from cached data before background refresh.
 - Added a built-in `node --test` classification test suite and wired it to `npm test`.
 - Added lazy file-history sampling for connected autopsy views so file activity can be derived from recent GitHub commits when a live repo is opened.
+
+### Fixed
+
+- Death certificate modal top getting cut off when taller than the viewport — changed flex alignment from `center` to `flex-start` so the modal scrolls from the top.
 
 ### Changed
 

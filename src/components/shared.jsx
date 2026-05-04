@@ -97,18 +97,21 @@ export function StatePill({ state, voice }) {
 // ─────────────────────────────────────────────────────
 // Repo table
 // ─────────────────────────────────────────────────────
-export function RepoTable({ repos, voice, onOpen }) {
+const ALL_COLS = { status: true, vitals: true, activity: true, lastCommit: true, lifespan: true, stars: true }
+
+export function RepoTable({ repos, voice, onOpen, visibleCols = ALL_COLS, dateFormat = 'relative' }) {
+  const v = { ...ALL_COLS, ...visibleCols }
   return (
     <table className="repo-table">
       <thead>
         <tr>
           <th>Repository</th>
-          <th>Status</th>
-          <th>Vitals</th>
-          <th>Activity (30d)</th>
-          <th style={{ textAlign: 'right' }}>Last commit</th>
-          <th style={{ textAlign: 'right' }}>Lifespan</th>
-          <th style={{ textAlign: 'right' }}>★</th>
+          {v.status     && <th>Status</th>}
+          {v.vitals     && <th>Vitals</th>}
+          {v.activity   && <th>Activity (30d)</th>}
+          {v.lastCommit && <th style={{ textAlign: 'right' }}>Last commit</th>}
+          {v.lifespan   && <th style={{ textAlign: 'right' }}>Lifespan</th>}
+          {v.stars      && <th style={{ textAlign: 'right' }}>★</th>}
         </tr>
       </thead>
       <tbody>
@@ -127,12 +130,12 @@ export function RepoTable({ repos, voice, onOpen }) {
                 )}
               </div>
             </td>
-            <td><StatePill state={r.state} voice={voice} /></td>
-            <td><VitalBar value={r.vitals} /></td>
-            <td><Sparkline data={r.sparkline} flat={r.state === 'flatlined' || r.state === 'dead'} /></td>
-            <td className="muted" style={{ textAlign: 'right' }}>{relTime(r.lastCommit)}</td>
-            <td className="muted" style={{ textAlign: 'right' }}>{r.lifespan}</td>
-            <td className="num">{r.stars}</td>
+            {v.status     && <td><StatePill state={r.state} voice={voice} /></td>}
+            {v.vitals     && <td><VitalBar value={r.vitals} /></td>}
+            {v.activity   && <td><Sparkline data={r.sparkline} flat={r.state === 'flatlined' || r.state === 'dead'} /></td>}
+            {v.lastCommit && <td className="muted" style={{ textAlign: 'right' }}>{relTime(r.lastCommit, dateFormat)}</td>}
+            {v.lifespan   && <td className="muted" style={{ textAlign: 'right' }}>{r.lifespan}</td>}
+            {v.stars      && <td className="num">{r.stars}</td>}
           </tr>
         ))}
       </tbody>
@@ -143,17 +146,19 @@ export function RepoTable({ repos, voice, onOpen }) {
 // ─────────────────────────────────────────────────────
 // Helpers
 // ─────────────────────────────────────────────────────
-export function relTime(dateStr) {
+export function relTime(dateStr, format = 'relative') {
   const now = new Date()
   const d = new Date(dateStr)
   const diffDays = Math.floor((now - d) / (1000 * 60 * 60 * 24))
-  if (diffDays < 1) return 'today'
-  if (diffDays < 2) return 'yesterday'
-  if (diffDays < 7) return `${diffDays}d ago`
-  if (diffDays < 30) return `${Math.floor(diffDays / 7)}w ago`
-  if (diffDays < 365) return `${Math.floor(diffDays / 30)}mo ago`
-  const y = (diffDays / 365).toFixed(1)
-  return `${y}y ago`
+  const rel = diffDays < 1 ? 'today'
+    : diffDays < 2 ? 'yesterday'
+    : diffDays < 7 ? `${diffDays}d ago`
+    : diffDays < 30 ? `${Math.floor(diffDays / 7)}w ago`
+    : diffDays < 365 ? `${Math.floor(diffDays / 30)}mo ago`
+    : `${(diffDays / 365).toFixed(1)}y ago`
+  if (format === 'absolute') return formatDate(dateStr)
+  if (format === 'both') return `${rel} · ${formatDate(dateStr)}`
+  return rel
 }
 
 export function formatDate(dateStr) {

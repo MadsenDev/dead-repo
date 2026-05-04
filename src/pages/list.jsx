@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react'
 import { EkgLine, RepoTable } from '../components/shared'
 import { LANG_COLORS } from '../lib/classify'
 
-export function ListPage({ voice, page, repos, onOpenRepo }) {
+export function ListPage({ voice, page, repos, onOpenRepo, visibleCols, dateFormat }) {
   const config = {
     ward: { state: 'alive', title: voice.ward, crumb: 'STATE: ALIVE', alive: true,
             sub: voice.name === 'Monday'
@@ -123,7 +123,7 @@ export function ListPage({ voice, page, repos, onOpenRepo }) {
           {voice.nothingHere}
         </div>
       ) : (
-        <RepoTable repos={view} voice={voice} onOpen={onOpenRepo} />
+        <RepoTable repos={view} voice={voice} onOpen={onOpenRepo} visibleCols={visibleCols} dateFormat={dateFormat} />
       )}
     </>
   )

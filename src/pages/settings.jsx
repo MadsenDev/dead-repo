@@ -3,6 +3,8 @@ import { EkgLine } from '../components/shared'
 import { VOICES } from '../data/voices'
 
 export function SettingsPage({ voice, voiceKey, onPickVoice, accent, onAccent, density, onDensity,
+                               theme, onTheme, defaultPage, onDefaultPage, scanLimit, onScanLimit,
+                               visibleCols, onVisibleCols, dateFormat, onDateFormat,
                                githubUser, isLive, syncing, onDisconnect, onConnect, onResync,
                                thresholds, onThresholdsChange, githubNotice, cacheMeta }) {
   const personas = [
@@ -11,6 +13,9 @@ export function SettingsPage({ voice, voiceKey, onPickVoice, accent, onAccent, d
     { key: 'supportive', voice: VOICES.supportive },
     { key: 'surfer', voice: VOICES.surfer },
     { key: 'professional', voice: VOICES.professional },
+    { key: 'therapist', voice: VOICES.therapist },
+    { key: 'weepy', voice: VOICES.weepy },
+    { key: 'victorian', voice: VOICES.victorian },
   ]
 
   return (
@@ -58,7 +63,7 @@ export function SettingsPage({ voice, voiceKey, onPickVoice, accent, onAccent, d
                         letterSpacing: '0.12em', color: 'var(--fg-3)', marginBottom: 4 }}>
             02 · Display
           </div>
-          <div style={{ fontSize: 16, color: 'var(--fg-0)' }}>Vital sign monitor</div>
+          <div style={{ fontSize: 16, color: 'var(--fg-0)' }}>Appearance</div>
         </div>
 
         <div className="panel" style={{ padding: '6px 0' }}>
@@ -82,17 +87,72 @@ export function SettingsPage({ voice, voiceKey, onPickVoice, accent, onAccent, d
           </SettingRow>
 
           <SettingRow label="Data density" hint="Affects table padding and font sizing.">
-            <div style={{ display: 'flex', gap: 0, background: 'var(--bg-2)', border: '1px solid var(--line)', borderRadius: 3, padding: 2 }}>
-              {['sparse', 'medium', 'dense'].map(d => (
-                <button key={d} onClick={() => onDensity(d)}
-                        className="btn" style={{
-                          background: density === d ? 'var(--bg-4)' : 'transparent',
-                          border: 0, color: density === d ? 'var(--fg-0)' : 'var(--fg-2)',
-                          borderRadius: 2,
-                        }}>{d}</button>
-              ))}
-            </div>
+            <SegControl options={['sparse', 'medium', 'dense']} value={density} onChange={onDensity} />
           </SettingRow>
+
+          <SettingRow label="Theme" hint="Light mode is a work in progress on some panels." last>
+            <SegControl options={['dark', 'light']} value={theme} onChange={onTheme} />
+          </SettingRow>
+        </div>
+
+        <div style={{ height: 40 }} />
+
+        <SectionHeader n="03" label="View" sub="Table columns, date format, and landing page." />
+
+        <div className="panel" style={{ padding: '6px 0' }}>
+          <SettingRow label="Default landing page" hint="Which page opens when the app loads.">
+            <SegControl
+              options={['dashboard', 'ward', 'hospital', 'morgue', 'graveyard']}
+              labels={[voice.dashTitle, voice.ward, voice.hospital, voice.morgue, voice.graveyard]}
+              value={defaultPage}
+              onChange={onDefaultPage}
+            />
+          </SettingRow>
+
+          <SettingRow label="Date format" hint="How 'Last commit' dates appear in the repo table.">
+            <SegControl
+              options={['relative', 'absolute', 'both']}
+              value={dateFormat}
+              onChange={onDateFormat}
+            />
+          </SettingRow>
+
+          <SettingRow label="Scan limit" hint="Max repositories fetched from GitHub per sync." last>
+            <SegControl
+              options={[100, 250, 500]}
+              value={scanLimit}
+              onChange={onScanLimit}
+            />
+          </SettingRow>
+        </div>
+
+        <div style={{ height: 20 }} />
+
+        <div style={{ fontFamily: 'var(--mono)', fontSize: 10, textTransform: 'uppercase',
+                      letterSpacing: '0.12em', color: 'var(--fg-3)', marginBottom: 10, paddingLeft: 2 }}>
+          Table columns
+        </div>
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+          {[
+            { key: 'status',     label: 'Status' },
+            { key: 'vitals',     label: 'Vitals' },
+            { key: 'activity',   label: 'Activity' },
+            { key: 'lastCommit', label: 'Last commit' },
+            { key: 'lifespan',   label: 'Lifespan' },
+            { key: 'stars',      label: '★ Stars' },
+          ].map(({ key, label }) => {
+            const on = visibleCols[key]
+            return (
+              <button key={key} onClick={() => onVisibleCols({ [key]: !on })}
+                      className="btn" style={{
+                        borderColor: on ? 'var(--vital)' : 'var(--line-2)',
+                        color: on ? 'var(--vital)' : 'var(--fg-3)',
+                        background: on ? 'var(--vital-faint)' : 'var(--bg-2)',
+                      }}>
+                {on ? '✓ ' : ''}{label}
+              </button>
+            )
+          })}
         </div>
 
         <div style={{ height: 40 }} />
@@ -100,7 +160,7 @@ export function SettingsPage({ voice, voiceKey, onPickVoice, accent, onAccent, d
         <div style={{ marginBottom: 14 }}>
           <div style={{ fontFamily: 'var(--mono)', fontSize: 10, textTransform: 'uppercase',
                         letterSpacing: '0.12em', color: 'var(--fg-3)', marginBottom: 4 }}>
-            03 · GitHub
+            04 · GitHub
           </div>
           <div style={{ fontSize: 16, color: 'var(--fg-0)' }}>Connection</div>
         </div>
@@ -161,7 +221,7 @@ export function SettingsPage({ voice, voiceKey, onPickVoice, accent, onAccent, d
         <div style={{ marginBottom: 14 }}>
           <div style={{ fontFamily: 'var(--mono)', fontSize: 10, textTransform: 'uppercase',
                         letterSpacing: '0.12em', color: 'var(--fg-3)', marginBottom: 4 }}>
-            04 · Triage
+            05 · Triage
           </div>
           <div style={{ fontSize: 16, color: 'var(--fg-0)' }}>Death thresholds</div>
           <div style={{ fontSize: 12, color: 'var(--fg-2)', marginTop: 4 }}>
@@ -179,10 +239,38 @@ export function SettingsPage({ voice, voiceKey, onPickVoice, accent, onAccent, d
   )
 }
 
-function SettingRow({ label, hint, children }) {
+function SectionHeader({ n, label, sub }) {
+  return (
+    <div style={{ marginBottom: 14 }}>
+      <div style={{ fontFamily: 'var(--mono)', fontSize: 10, textTransform: 'uppercase',
+                    letterSpacing: '0.12em', color: 'var(--fg-3)', marginBottom: 4 }}>
+        {n} · {label}
+      </div>
+      <div style={{ fontSize: 16, color: 'var(--fg-0)' }}>{label}</div>
+      {sub && <div style={{ fontSize: 12, color: 'var(--fg-2)', marginTop: 4 }}>{sub}</div>}
+    </div>
+  )
+}
+
+function SegControl({ options, labels, value, onChange }) {
+  return (
+    <div style={{ display: 'flex', gap: 0, background: 'var(--bg-2)', border: '1px solid var(--line)', borderRadius: 3, padding: 2 }}>
+      {options.map((opt, i) => (
+        <button key={opt} onClick={() => onChange(opt)} className="btn" style={{
+          background: value === opt ? 'var(--bg-4)' : 'transparent',
+          border: 0, color: value === opt ? 'var(--fg-0)' : 'var(--fg-2)', borderRadius: 2,
+        }}>
+          {labels ? labels[i] : opt}
+        </button>
+      ))}
+    </div>
+  )
+}
+
+function SettingRow({ label, hint, last, children }) {
   return (
     <div style={{ display: 'grid', gridTemplateColumns: '1fr auto', gap: 24, alignItems: 'center',
-                  padding: '14px 22px', borderBottom: '1px solid var(--line)' }}>
+                  padding: '14px 22px', borderBottom: last ? 'none' : '1px solid var(--line)' }}>
       <div>
         <div style={{ fontSize: 13, color: 'var(--fg-0)' }}>{label}</div>
         <div style={{ fontSize: 11, color: 'var(--fg-3)', marginTop: 2 }}>{hint}</div>

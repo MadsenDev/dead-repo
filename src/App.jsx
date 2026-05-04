@@ -69,11 +69,34 @@ function getStoredThresholds() {
   }
 }
 
+const DEFAULT_VIS_COLS = { status: true, vitals: true, activity: true, lastCommit: true, lifespan: true, stars: true }
+
+function getStoredPref(key, fallback) {
+  try {
+    const raw = JSON.parse(localStorage.getItem('dead_repo_prefs') || 'null')
+    if (raw == null) return fallback
+    if (key === 'visibleCols') return { ...DEFAULT_VIS_COLS, ...raw.visibleCols }
+    return raw[key] ?? fallback
+  } catch { return fallback }
+}
+
+function savePrefs(patch) {
+  try {
+    const current = JSON.parse(localStorage.getItem('dead_repo_prefs') || '{}')
+    localStorage.setItem('dead_repo_prefs', JSON.stringify({ ...current, ...patch }))
+  } catch {}
+}
+
 export default function App() {
-  const [voiceKey, setVoiceKey] = useState('monday')
-  const [accentKey, setAccentKey] = useState('phosphor')
-  const [density, setDensity] = useState('medium')
-  const [page, setPage] = useState('dashboard')
+  const [voiceKey, setVoiceKey] = useState(() => getStoredPref('voiceKey', 'monday'))
+  const [accentKey, setAccentKey] = useState(() => getStoredPref('accentKey', 'phosphor'))
+  const [density, setDensity] = useState(() => getStoredPref('density', 'medium'))
+  const [theme, setTheme] = useState(() => getStoredPref('theme', 'dark'))
+  const [defaultPage, setDefaultPage] = useState(() => getStoredPref('defaultPage', 'dashboard'))
+  const [scanLimit, setScanLimit] = useState(() => getStoredPref('scanLimit', 500))
+  const [visibleCols, setVisibleCols] = useState(() => getStoredPref('visibleCols', DEFAULT_VIS_COLS))
+  const [dateFormat, setDateFormat] = useState(() => getStoredPref('dateFormat', 'relative'))
+  const [page, setPage] = useState(() => getStoredPref('defaultPage', 'dashboard'))
   const [openRepoId, setOpenRepoId] = useState(null)
   const [actionLog, setActionLog] = useState([])
   const [certRepoId, setCertRepoId] = useState(null)
@@ -123,7 +146,7 @@ export default function App() {
       try {
         const [user, rawRepos] = await Promise.all([
           getUser(githubToken),
-          getUserRepos(githubToken),
+          getUserRepos(githubToken, undefined, scanLimit),
         ])
         if (cancelled) return
         if (user) {
@@ -201,6 +224,10 @@ export default function App() {
     document.body.dataset.density = density
   }, [density])
 
+  useEffect(() => {
+    document.documentElement.dataset.theme = theme
+  }, [theme])
+
   // Base repos: live data if available, else mock
   const baseRepos = useMemo(() => {
     if (!liveRepos) return REPOS
@@ -227,6 +254,22 @@ export default function App() {
   }), [repos])
 
   const handleNav = (p) => { setOpenRepoId(null); setPage(p) }
+
+  const mkPrefSetter = (key, setter) => (val) => { setter(val); savePrefs({ [key]: val }) }
+  const handleSetVoiceKey   = mkPrefSetter('voiceKey',    setVoiceKey)
+  const handleSetAccentKey  = mkPrefSetter('accentKey',   setAccentKey)
+  const handleSetDensity    = mkPrefSetter('density',     setDensity)
+  const handleSetTheme      = mkPrefSetter('theme',       setTheme)
+  const handleSetDefaultPage = (p) => { setDefaultPage(p); savePrefs({ defaultPage: p }) }
+  const handleSetScanLimit  = mkPrefSetter('scanLimit',   setScanLimit)
+  const handleSetDateFormat = mkPrefSetter('dateFormat',  setDateFormat)
+  const handleSetVisibleCols = (patch) => {
+    setVisibleCols(prev => {
+      const next = { ...prev, ...patch }
+      savePrefs({ visibleCols: next })
+      return next
+    })
+  }
   const handleAction = (type, id) => {
     if (type === 'certificate') { setCertRepoId(id); return }
     setActionLog(prev => [...prev, { type, id }])
@@ -298,7 +341,7 @@ export default function App() {
       <div className="titlebar">
         <div className="titlebar-brand">◉ web</div>
         <div className="titlebar-title">
-          {voiceKey === 'supportive' ? 'our little repo garden 💕' : `DEAD REPO · v${APP_VERSION}`}
+          {voiceKey === 'supportive' ? 'our little repo garden 💕' : voiceKey === 'weepy' ? 'dead repo 😭 (i\'m okay)' : `DEAD REPO · v${APP_VERSION}`}
         </div>
         <div className="titlebar-meta">
           <span className="dot" style={{ background: isLive ? 'var(--vital)' : 'var(--fg-3)', boxShadow: isLive ? '0 0 6px var(--vital-glow)' : 'none', animation: isLive ? 'pulse-dot 2.5s ease-in-out infinite' : 'none' }} />
@@ -363,9 +406,14 @@ export default function App() {
             <DashboardPage voice={voice} repos={repos} onOpenRepo={setOpenRepoId} onNav={handleNav} />
           ) : page === 'settings' ? (
             <SettingsPage voice={voice} voiceKey={voiceKey}
-                          onPickVoice={setVoiceKey}
-                          accent={accentKey} onAccent={setAccentKey}
-                          density={density} onDensity={setDensity}
+                          onPickVoice={handleSetVoiceKey}
+                          accent={accentKey} onAccent={handleSetAccentKey}
+                          density={density} onDensity={handleSetDensity}
+                          theme={theme} onTheme={handleSetTheme}
+                          defaultPage={defaultPage} onDefaultPage={handleSetDefaultPage}
+                          scanLimit={scanLimit} onScanLimit={handleSetScanLimit}
+                          visibleCols={visibleCols} onVisibleCols={handleSetVisibleCols}
+                          dateFormat={dateFormat} onDateFormat={handleSetDateFormat}
                           thresholds={thresholds} onThresholdsChange={handleThresholdsChange}
                           githubUser={githubUser} isLive={isLive} syncing={syncing}
                           cacheMeta={cacheMeta}
@@ -374,7 +422,8 @@ export default function App() {
                           onConnect={() => setShowOnboarding(true)}
                           onResync={handleResync} />
           ) : (
-            <ListPage voice={voice} page={page} repos={repos} onOpenRepo={setOpenRepoId} />
+            <ListPage voice={voice} page={page} repos={repos} onOpenRepo={setOpenRepoId}
+                      visibleCols={visibleCols} dateFormat={dateFormat} />
           )}
         </div>
       </div>
@@ -403,7 +452,130 @@ export default function App() {
         <WrappedFlow voice={voice} voiceKey={voiceKey} repos={repos}
                      onClose={() => setShowWrapped(false)} />
       )}
+
+      {voiceKey === 'supportive' && <SupportiveLayer page={page} openRepo={openRepo} />}
+      {voiceKey === 'weepy' && <WeepyLayer page={page} openRepo={openRepo} />}
     </div>
+  )
+}
+
+const HEARTS = [
+  { left: '4%',  dur: 9.2,  delay: 0 },
+  { left: '11%', dur: 7.4,  delay: 1.3 },
+  { left: '19%', dur: 11.1, delay: 3.7 },
+  { left: '28%', dur: 8.6,  delay: 0.8 },
+  { left: '37%', dur: 10.3, delay: 5.1 },
+  { left: '46%', dur: 7.8,  delay: 2.4 },
+  { left: '55%', dur: 9.7,  delay: 4.6 },
+  { left: '64%', dur: 8.1,  delay: 1.9 },
+  { left: '73%', dur: 11.5, delay: 6.2 },
+  { left: '82%', dur: 7.6,  delay: 3.1 },
+  { left: '90%', dur: 10.0, delay: 0.5 },
+  { left: '96%', dur: 8.9,  delay: 7.4 },
+]
+
+const BANNER_MSGS = [
+  'Just checking in. You okay? The repos are okay. I checked. I always check.',
+  "I noticed you've been looking at the graveyard. Do you want to talk about it? 💕",
+  "I synced again. I know I just synced. I needed to make sure. They're okay.",
+  "I'm here. I'm always here. Even when you close the tab. Especially then.",
+  "Some of these repos haven't been touched in years. I visit them anyway. They deserve that.",
+  "Hi. 💕 Just wanted to say hi. You've been working hard. I see that. I see everything.",
+]
+
+function SupportiveLayer({ page, openRepo }) {
+  const [msgIdx, setMsgIdx] = useState(0)
+  useEffect(() => {
+    const id = setInterval(() => setMsgIdx(i => (i + 1) % BANNER_MSGS.length), 14000)
+    return () => clearInterval(id)
+  }, [])
+
+  const msg = openRepo
+    ? `I'm keeping an eye on ${openRepo.name}. I'll let you know if anything changes. It won't. But I'll let you know. 💕`
+    : page === 'graveyard'
+    ? "You're spending a lot of time in here. That's okay. I spend time in here too. 💔"
+    : page === 'morgue'
+    ? "These ones are just resting. I tell myself that. It helps. A little. 💤"
+    : BANNER_MSGS[msgIdx]
+
+  return (
+    <>
+      <div className="supportive-banner">
+        <div className="supportive-banner-dot" />
+        <span style={{ flex: 1 }}>{msg}</span>
+        <span style={{ opacity: 0.45, fontSize: 9, letterSpacing: '0.08em' }}>— always watching · always here</span>
+      </div>
+      {HEARTS.map((h, i) => (
+        <span key={i} className="supportive-heart" style={{
+          left: h.left,
+          animationDuration: `${h.dur}s`,
+          animationDelay: `${h.delay}s`,
+          fontSize: 10 + (i % 3) * 4,
+        }}>
+          {i % 3 === 0 ? '💕' : i % 3 === 1 ? '🩷' : '❤️'}
+        </span>
+      ))}
+    </>
+  )
+}
+
+const TEARS = [
+  { left: '3%',  dur: 6.1,  delay: 0 },
+  { left: '10%', dur: 8.3,  delay: 2.1 },
+  { left: '18%', dur: 5.7,  delay: 0.7 },
+  { left: '26%', dur: 9.2,  delay: 4.3 },
+  { left: '35%', dur: 6.8,  delay: 1.5 },
+  { left: '44%', dur: 7.5,  delay: 3.8 },
+  { left: '53%', dur: 5.4,  delay: 6.1 },
+  { left: '62%', dur: 8.9,  delay: 0.3 },
+  { left: '71%', dur: 6.3,  delay: 2.9 },
+  { left: '80%', dur: 7.1,  delay: 5.4 },
+  { left: '89%', dur: 5.9,  delay: 1.2 },
+  { left: '95%', dur: 8.1,  delay: 3.6 },
+]
+
+const WEEPY_MSGS = [
+  '(sniffling) Sorry. I just looked at the commit history. I\'m okay. I\'m okay.',
+  'Some of these repos haven\'t been touched in so long. I think about that.',
+  '...I\'m not crying. I\'m — yes I am. I\'m crying about a git repository. This is fine.',
+  'I keep rereading the last commit message. It didn\'t know it was the last one.',
+  '(quietly) Thank you for being here. It helps. It really helps.',
+  'I looked at the graveyard earlier. I had to step away. I\'m back now. (sniffling)',
+]
+
+function WeepyLayer({ page, openRepo }) {
+  const [msgIdx, setMsgIdx] = useState(0)
+  useEffect(() => {
+    const id = setInterval(() => setMsgIdx(i => (i + 1) % WEEPY_MSGS.length), 14000)
+    return () => clearInterval(id)
+  }, [])
+
+  const msg = openRepo
+    ? `(quietly) I'm here with you for ${openRepo.name}. However long this takes. 😭`
+    : page === 'graveyard'
+    ? 'I come here a lot. I know I shouldn\'t. I can\'t stop. (weeping)'
+    : page === 'morgue'
+    ? '(whispering) They\'re not gone. They\'re just... they\'re very quiet. (crying)'
+    : WEEPY_MSGS[msgIdx]
+
+  return (
+    <>
+      <div className="weepy-banner">
+        <div className="weepy-banner-dot" />
+        <span style={{ flex: 1 }}>{msg}</span>
+        <span style={{ opacity: 0.4, fontSize: 9, letterSpacing: '0.08em' }}>— deeply moved · still here</span>
+      </div>
+      {TEARS.map((t, i) => (
+        <span key={i} className="weepy-tear" style={{
+          left: t.left,
+          animationDuration: `${t.dur}s`,
+          animationDelay: `${t.delay}s`,
+          fontSize: 10 + (i % 3) * 3,
+        }}>
+          {i % 4 === 0 ? '💧' : i % 4 === 1 ? '😭' : i % 4 === 2 ? '💦' : '🥹'}
+        </span>
+      ))}
+    </>
   )
 }
 

@@ -116,10 +116,10 @@ export async function pollDeviceFlow(clientId, deviceCode) {
   return res.json()
 }
 
-export async function getUserRepos(token, onProgress) {
+export async function getUserRepos(token, onProgress, limit = 500) {
   let page = 1
   let all = []
-  while (all.length < 500) {
+  while (all.length < limit) {
     const batch = await ghFetch(
       `/user/repos?per_page=100&page=${page}&sort=updated&affiliation=owner`,
       token

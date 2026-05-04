@@ -7,7 +7,7 @@ export function CertificateModal({ repo, voice, onClose }) {
   const [exporting, setExporting] = useState(false)
 
   if (!repo) return null
-  const isMonday = voice.name === 'Monday'
+  const c = voice.cert
 
   const handleExport = async () => {
     setExporting(true)
@@ -23,13 +23,13 @@ export function CertificateModal({ repo, voice, onClose }) {
       const url = URL.createObjectURL(blob)
       const img = new Image()
       img.onload = () => {
-        const c = document.createElement('canvas')
-        c.width = rect.width * 2; c.height = rect.height * 2
-        const ctx = c.getContext('2d')
+        const canvas = document.createElement('canvas')
+        canvas.width = rect.width * 2; canvas.height = rect.height * 2
+        const ctx = canvas.getContext('2d')
         ctx.fillStyle = '#0a0d0c'
-        ctx.fillRect(0, 0, c.width, c.height)
+        ctx.fillRect(0, 0, canvas.width, canvas.height)
         ctx.drawImage(img, 0, 0)
-        c.toBlob((b) => {
+        canvas.toBlob((b) => {
           const a = document.createElement('a')
           a.href = URL.createObjectURL(b)
           a.download = `death-certificate-${repo.name}.png`
@@ -48,28 +48,31 @@ export function CertificateModal({ repo, voice, onClose }) {
   const serial = ('DR-' + repo.id.toUpperCase().replace(/-/g, '') + '-' +
                   (repo.timeOfDeath || repo.lastCommit).replace(/-/g, ''))
 
+  const handlePrint = () => window.print()
+
   return (
-    <div onClick={onClose}
+    <div className="cert-modal" onClick={onClose}
          style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.85)',
-                  zIndex: 200, display: 'flex', alignItems: 'center', justifyContent: 'center',
-                  padding: 40, overflow: 'auto', backdropFilter: 'blur(8px)' }}>
+                  zIndex: 200, display: 'flex', alignItems: 'flex-start', justifyContent: 'center',
+                  padding: 40, overflowY: 'auto', backdropFilter: 'blur(8px)' }}>
       <div onClick={(e) => e.stopPropagation()}
            style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 20 }}>
-        <div style={{ display: 'flex', gap: 8, alignItems: 'center', width: '100%',
+        <div className="cert-controls" style={{ display: 'flex', gap: 8, alignItems: 'center', width: '100%',
                       maxWidth: 720, justifyContent: 'space-between' }}>
           <div style={{ fontFamily: 'var(--mono)', fontSize: 10, letterSpacing: '0.20em',
                         color: 'var(--fg-3)', textTransform: 'uppercase' }}>
-            {isMonday ? 'Receipt for time wasted' : 'Certificate of death · ready to export'}
+            {c.controls}
           </div>
           <div style={{ display: 'flex', gap: 8 }}>
             <button className="btn" onClick={handleExport} disabled={exporting}>
               {exporting ? 'Exporting…' : '↓ Save PNG'}
             </button>
+            <button className="btn" onClick={handlePrint}>⎙ Print</button>
             <button className="btn ghost" onClick={onClose}>✕ Close</button>
           </div>
         </div>
 
-        <div ref={certRef} style={{
+        <div ref={certRef} className="cert-doc" style={{
           width: 720, background: '#0d1110',
           border: '1px solid rgba(255,255,255,0.10)',
           padding: 0, fontFamily: 'var(--sans)',
@@ -84,11 +87,11 @@ export function CertificateModal({ repo, voice, onClose }) {
               <div>
                 <div style={{ fontFamily: 'var(--mono)', fontSize: 9, letterSpacing: '0.18em',
                               color: 'var(--fg-3)', textTransform: 'uppercase' }}>
-                  Department of Repository Health · github.com
+                  {c.department}
                 </div>
                 <div style={{ fontFamily: 'var(--mono)', fontSize: 13, color: 'var(--fg-0)',
                               marginTop: 2, letterSpacing: '0.04em' }}>
-                  CERTIFICATE OF DEATH
+                  {c.docTitle}
                 </div>
               </div>
             </div>
@@ -103,7 +106,7 @@ export function CertificateModal({ repo, voice, onClose }) {
           <div style={{ padding: '28px 36px 24px', borderBottom: '1px solid rgba(255,255,255,0.08)' }}>
             <div style={{ fontFamily: 'var(--mono)', fontSize: 10, letterSpacing: '0.14em',
                           color: 'var(--fg-3)', textTransform: 'uppercase', marginBottom: 8 }}>
-              Subject
+              {c.subject}
             </div>
             <div style={{ fontFamily: 'var(--mono)', fontSize: 30, fontWeight: 400,
                           color: 'var(--fg-0)', letterSpacing: '-0.01em', display: 'flex',
@@ -134,7 +137,7 @@ export function CertificateModal({ repo, voice, onClose }) {
                           background: 'var(--crit)', boxShadow: '0 0 8px oklch(0.65 0.20 25 / 0.5)' }} />
             <div style={{ fontFamily: 'var(--mono)', fontSize: 10, letterSpacing: '0.14em',
                           color: 'var(--fg-3)', textTransform: 'uppercase', marginBottom: 10 }}>
-              Cause of death
+              {c.causeLabel}
             </div>
             <div style={{ fontSize: 28, fontWeight: 400, color: 'var(--crit)',
                           letterSpacing: '-0.01em', marginBottom: 10 }}>
@@ -148,7 +151,7 @@ export function CertificateModal({ repo, voice, onClose }) {
           <div style={{ padding: '24px 36px', borderBottom: '1px solid rgba(255,255,255,0.08)' }}>
             <div style={{ fontFamily: 'var(--mono)', fontSize: 10, letterSpacing: '0.14em',
                           color: 'var(--fg-3)', textTransform: 'uppercase', marginBottom: 10 }}>
-              Final transmission
+              {c.transmission}
             </div>
             <div style={{ fontFamily: 'var(--mono)', fontSize: 13, color: 'var(--fg-0)',
                           padding: '12px 16px', background: 'rgba(0,0,0,0.4)',
@@ -161,7 +164,7 @@ export function CertificateModal({ repo, voice, onClose }) {
                         gap: 24, borderBottom: '1px solid rgba(255,255,255,0.08)' }}>
             <div>
               <div style={{ fontFamily: 'var(--mono)', fontSize: 9, letterSpacing: '0.14em',
-                            color: 'var(--fg-3)', textTransform: 'uppercase' }}>Final EKG</div>
+                            color: 'var(--fg-3)', textTransform: 'uppercase' }}>{c.ekgLabel}</div>
               <div style={{ marginTop: 4 }}>
                 <EkgLine alive={false} width={280} height={40} />
               </div>
@@ -169,7 +172,7 @@ export function CertificateModal({ repo, voice, onClose }) {
             <div style={{ flex: 1 }} />
             <div style={{ textAlign: 'right' }}>
               <div style={{ fontFamily: 'var(--mono)', fontSize: 9, letterSpacing: '0.14em',
-                            color: 'var(--fg-3)', textTransform: 'uppercase' }}>Heart rate</div>
+                            color: 'var(--fg-3)', textTransform: 'uppercase' }}>{c.heartRate}</div>
               <div style={{ fontFamily: 'var(--mono)', fontSize: 22, color: 'var(--crit)', marginTop: 2 }}>0 BPM</div>
             </div>
           </div>
@@ -178,7 +181,7 @@ export function CertificateModal({ repo, voice, onClose }) {
                         justifyContent: 'space-between', alignItems: 'flex-end', gap: 24 }}>
             <div>
               <div style={{ fontFamily: 'var(--mono)', fontSize: 9, color: 'var(--fg-3)',
-                            letterSpacing: '0.10em', marginBottom: 6 }}>CERTIFIED BY</div>
+                            letterSpacing: '0.10em', marginBottom: 6 }}>{c.certified}</div>
               <div style={{ fontFamily: '"Brush Script MT", "Lucida Handwriting", cursive',
                             fontSize: 22, color: 'var(--vital)', letterSpacing: '-0.01em',
                             transform: 'rotate(-2deg) translateX(4px)',
@@ -192,7 +195,7 @@ export function CertificateModal({ repo, voice, onClose }) {
             </div>
             <div style={{ textAlign: 'right' }}>
               <div style={{ fontFamily: 'var(--mono)', fontSize: 9, color: 'var(--fg-3)',
-                            letterSpacing: '0.10em' }}>FILED</div>
+                            letterSpacing: '0.10em' }}>{c.filed}</div>
               <div style={{ fontFamily: 'var(--mono)', fontSize: 11, color: 'var(--fg-1)',
                             marginTop: 2 }}>{formatDate(repo.declared || repo.lastCommit)} · 14:32 UTC</div>
             </div>
@@ -204,7 +207,7 @@ export function CertificateModal({ repo, voice, onClose }) {
                           fontFamily: 'var(--mono)', fontSize: 14, fontWeight: 600,
                           letterSpacing: '0.16em', color: 'var(--crit)', opacity: 0.85,
                           textShadow: '0 0 8px oklch(0.65 0.20 25 / 0.4)' }}>
-              DECEASED
+              {c.stamp}
             </div>
             <div style={{ fontFamily: 'var(--mono)', fontSize: 8, color: 'var(--crit)',
                           textAlign: 'center', marginTop: 4, letterSpacing: '0.10em', opacity: 0.7 }}>
@@ -216,16 +219,14 @@ export function CertificateModal({ repo, voice, onClose }) {
                         display: 'flex', justifyContent: 'space-between',
                         fontFamily: 'var(--mono)', fontSize: 8, color: 'var(--fg-4)',
                         letterSpacing: '0.10em' }}>
-            <span>· · · DEAD REPO · OFFICIAL DOCUMENT · NOT VALID FOR LEGAL PURPOSES · · ·</span>
+            <span>{c.footer}</span>
             <span>{serial}</span>
           </div>
         </div>
 
-        <div style={{ fontFamily: 'var(--mono)', fontSize: 11, color: 'var(--fg-3)',
+        <div className="cert-caption" style={{ fontFamily: 'var(--mono)', fontSize: 11, color: 'var(--fg-3)',
                       maxWidth: 720, textAlign: 'center', lineHeight: 1.6 }}>
-          {isMonday
-            ? "Suitable for framing. Or not framing. The repo doesn't care. It's dead."
-            : 'A formal record. Suitable for portfolio review, archival, or social posting.'}
+          {c.caption}
         </div>
       </div>
     </div>
